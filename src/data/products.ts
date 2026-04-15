@@ -1,0 +1,403 @@
+import product1 from "@/assets/hero-perfume.jpg";
+import product2 from "@/assets/hero.png";
+import lostCherry from "@/assets/lost-cherry.jpg";
+import hisConfession from "@/assets/his-confession.jpg";
+import aventus from "@/assets/aventus.jpg";
+import sauvage from "@/assets/sauvage.jpg";
+import bleuDeChanel from "@/assets/bleu-de-chanel.jpg";
+import laNuit from "@/assets/la-nuit.jpg";
+import jazzClub from "@/assets/jazz-club.jpg";
+import gypsyWater from "@/assets/gypsy-water.jpg";
+
+export type DriveType = "power" | "mystery" | "precision" | "passion";
+export type ElementType = "oud" | "amber" | "fresh" | "floral";
+export type OccasionType = "boardroom" | "evening" | "intimate" | "signature";
+
+export interface Product {
+  id: string;
+  name: string;
+  brand: string;
+  subtitle: string;
+  description: string;
+  price: string;
+  image: string;
+  topNotes: string[];
+  heartNotes: string[];
+  baseNotes: string[];
+  longevity: number;
+  sillage: number;
+  rating: number;
+  reviews: number;
+  collection?: "Core" | "Limited" | "Archive";
+  tags: {
+    drive: DriveType;
+    element: ElementType;
+    occasion: OccasionType;
+  };
+}
+
+export const products: Product[] = [
+  {
+    id: "1",
+    name: "Sovereign",
+    brand: "NOIR",
+    subtitle: "Eau de Parfum Intense",
+    description: "A commanding blend of rare Cambodian Oud and Black Pepper. It doesn't ask for attention; it assumes it.",
+    price: "$385",
+    image: product1,
+    topNotes: ["Black Pepper", "Bergamot", "Saffron"],
+    heartNotes: ["Cambodian Oud", "Bulgarian Rose", "Leather"],
+    baseNotes: ["Ambergris", "Patchouli", "Sandalwood"],
+    longevity: 95,
+    sillage: 88,
+    rating: 4.9,
+    reviews: 2847,
+    collection: "Core",
+    tags: { drive: "power", element: "oud", occasion: "boardroom" }
+  },
+  {
+    id: "2",
+    name: "Ember",
+    brand: "NOIR",
+    subtitle: "Parfum Extrait",
+    description: "The heat of a dying fire in a winter forest. Smoky, resinous, and unapologetically masculine.",
+    price: "$450",
+    image: product2,
+    topNotes: ["Cinnamon", "Cardamom", "Rum"],
+    heartNotes: ["Tobacco Leaf", "Incense", "Cedar"],
+    baseNotes: ["Vanilla Bean", "Benzoin", "Labdanum"],
+    longevity: 98,
+    sillage: 92,
+    rating: 4.8,
+    reviews: 1923,
+    collection: "Core",
+    tags: { drive: "passion", element: "amber", occasion: "evening" }
+  },
+  {
+    id: "3",
+    name: "Clarity",
+    brand: "NOIR",
+    subtitle: "Eau de Parfum",
+    description: "Cold-pressed grapefruit and ozone. Like a sharp suit and a clear mind at 6 AM.",
+    price: "$320",
+    image: product1,
+    topNotes: ["Iced Grapefruit", "Lemon Zest", "Sea Salt"],
+    heartNotes: ["Violet Leaf", "Sage", "Geranium"],
+    baseNotes: ["Ambroxan", "White Musk", "Oakmoss"],
+    longevity: 85,
+    sillage: 72,
+    rating: 4.7,
+    reviews: 3104,
+    collection: "Core",
+    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+  },
+  {
+    id: "4",
+    name: "Obsidian Night",
+    brand: "Maison Obscura",
+    subtitle: "Parfum Absolu",
+    description: "A liquid shadow. Dark florals crushed against cold stone and ancient resins.",
+    price: "$520",
+    image: product2,
+    topNotes: ["Absinthe", "Blackcurrant", "Pink Pepper"],
+    heartNotes: ["Night-Blooming Jasmine", "Ink Accord", "Leather"],
+    baseNotes: ["Castoreum", "Dark Musk", "Civet"],
+    longevity: 99,
+    sillage: 95,
+    rating: 4.9,
+    reviews: 1204,
+    collection: "Limited",
+    tags: { drive: "mystery", element: "oud", occasion: "evening" }
+  },
+  {
+    id: "5",
+    name: "Gilded Silk",
+    brand: "Maison Obscura",
+    subtitle: "Eau de Parfum",
+    description: "The scent of absolute luxury. Smooth, creamy sandalwood wrapped in golden amber.",
+    price: "$395",
+    image: product1,
+    topNotes: ["Peach Skin", "White Pepper"],
+    heartNotes: ["Silk Accord", "Gardenia", "Iris Butter"],
+    baseNotes: ["Mysore Sandalwood", "Vanilla", "Cashmeran"],
+    longevity: 92,
+    sillage: 85,
+    rating: 4.8,
+    reviews: 876,
+    collection: "Core",
+    tags: { drive: "mystery", element: "amber", occasion: "intimate" }
+  },
+  {
+    id: "6",
+    name: "Empire",
+    brand: "Attar Royal",
+    subtitle: "Parfum Extrait",
+    description: "The scent of victory. Rare spices from the Silk Road and the finest aged Oud.",
+    price: "$680",
+    image: product2,
+    topNotes: ["Saffron", "Nutmeg", "Clove"],
+    heartNotes: ["Aged Oud", "Frankincense", "Taif Rose"],
+    baseNotes: ["Amber", "Musk", "Civet"],
+    longevity: 97,
+    sillage: 90,
+    rating: 5.0,
+    reviews: 412,
+    collection: "Archive",
+    tags: { drive: "power", element: "amber", occasion: "evening" }
+  },
+  {
+    id: "7",
+    name: "Architect",
+    brand: "Attar Royal",
+    subtitle: "Eau de Parfum Intense",
+    description: "Structured, clean, and uncompromising. A masterpiece of molecular fragrance design.",
+    price: "$410",
+    image: product1,
+    topNotes: ["Metallic Accord", "Aldehydes", "Juniper"],
+    heartNotes: ["Concrete Accord", "Iris", "Pine Needle"],
+    baseNotes: ["ISO E Super", "Vetiver", "Cedar"],
+    longevity: 90,
+    sillage: 82,
+    rating: 4.7,
+    reviews: 1567,
+    collection: "Core",
+    tags: { drive: "precision", element: "fresh", occasion: "boardroom" }
+  },
+  {
+    id: "8",
+    name: "Vixen",
+    brand: "Haus Alchemy",
+    subtitle: "Parfum",
+    description: "Dangerous, seductive, and predatory. A floral heart that bites.",
+    price: "$475",
+    image: product2,
+    topNotes: ["Poison Ivy Accord", "Pomegranate"],
+    heartNotes: ["Black Orchid", "Tuberose", "Blood Rose"],
+    baseNotes: ["Dark Chocolate", "Patchouli", "Amber"],
+    longevity: 94,
+    sillage: 88,
+    rating: 4.9,
+    reviews: 2031,
+    collection: "Limited",
+    tags: { drive: "passion", element: "floral", occasion: "intimate" }
+  },
+  {
+    id: "9",
+    name: "Static",
+    brand: "Haus Alchemy",
+    subtitle: "Eau de Parfum",
+    description: "Electricity in a bottle. Ozonic, metallic, and strangely nostalgic.",
+    price: "$340",
+    image: product1,
+    topNotes: ["Static Electricity Accord", "Bergamot"],
+    heartNotes: ["Hot Metal Accord", "Lavender", "Geranium"],
+    baseNotes: ["White Amber", "Clean Musk", "Ambroxan"],
+    longevity: 82,
+    sillage: 70,
+    rating: 4.6,
+    reviews: 943,
+    collection: "Core",
+    tags: { drive: "precision", element: "floral", occasion: "signature" }
+  },
+  {
+    id: "10",
+    name: "Monolith",
+    brand: "NOIR",
+    subtitle: "Parfum Absolu",
+    description: "A single, towering note of the finest Indonesian Patchouli, aged for ten years.",
+    price: "$550",
+    image: product2,
+    topNotes: ["Dried Fruit", "Cocoa"],
+    heartNotes: ["Aged Patchouli", "Tobacco"],
+    baseNotes: ["Vanilla", "Earth Accord"],
+    longevity: 96,
+    sillage: 85,
+    rating: 4.9,
+    reviews: 652,
+    collection: "Archive",
+    tags: { drive: "power", element: "oud", occasion: "evening" }
+  },
+  {
+    id: "11",
+    name: "Veridian",
+    brand: "Maison Obscura",
+    subtitle: "Eau de Parfum",
+    description: "The smell of a rainforest after a storm. Deep green, humid, and alive.",
+    price: "$365",
+    image: product1,
+    topNotes: ["Galbanum", "Tomato Leaf", "Mint"],
+    heartNotes: ["Bamboo", "Rain Accord", "Lily of the Valley"],
+    baseNotes: ["Vetiver", "Sandalwood", "Patchouli"],
+    longevity: 88,
+    sillage: 78,
+    rating: 4.8,
+    reviews: 1420,
+    collection: "Core",
+    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+  },
+  {
+    id: "12",
+    name: "Catalyst",
+    brand: "Attar Royal",
+    subtitle: "Eau de Parfum Intense",
+    description: "A spark in the dark. Spicy, energetic, and ready for anything.",
+    price: "$425",
+    image: product2,
+    topNotes: ["Pink Pepper", "Ginger", "Lime"],
+    heartNotes: ["Chili Accord", "Jasmine", "Mate"],
+    baseNotes: ["Leather", "Cedar", "Tonka Bean"],
+    longevity: 91,
+    sillage: 84,
+    rating: 4.7,
+    reviews: 1105,
+    collection: "Core",
+    tags: { drive: "passion", element: "floral", occasion: "boardroom" }
+  },
+  {
+    id: "13",
+    name: "Lost Cherry",
+    brand: "Tom Ford",
+    subtitle: "Eau de Parfum",
+    description: "An intoxicating blend of black cherry, almond, and Turkish rose. Sweet, seductive, and impossible to forget.",
+    price: "$375",
+    image: lostCherry,
+    topNotes: ["Black Cherry", "Bitter Almond", "Liquor"],
+    heartNotes: ["Turkish Rose", "Jasmine", "Plum"],
+    baseNotes: ["Tonka Bean", "Vanilla", "Sandalwood"],
+    longevity: 89,
+    sillage: 86,
+    rating: 4.8,
+    reviews: 3421,
+    collection: "Limited",
+    tags: { drive: "passion", element: "floral", occasion: "intimate" }
+  },
+  {
+    id: "14",
+    name: "His Confession",
+    brand: "Lattafa",
+    subtitle: "Eau de Parfum",
+    description: "A modern aromatic fougère that balances fresh bergamot with warm vanilla and musk. Confident and accessible.",
+    price: "$45",
+    image: hisConfession,
+    topNotes: ["Bergamot", "Lavender", "Mint"],
+    heartNotes: ["Orange Blossom", "Cinnamon", "Rosemary"],
+    baseNotes: ["Vanilla", "Musk", "Amberwood"],
+    longevity: 81,
+    sillage: 74,
+    rating: 4.5,
+    reviews: 2890,
+    collection: "Core",
+    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+  },
+  {
+    id: "15",
+    name: "Aventus",
+    brand: "Creed",
+    subtitle: "Eau de Parfum",
+    description: "The legendary scent of success. Smoky pineapple and birch create a bold, unmistakable signature.",
+    price: "$445",
+    image: aventus,
+    topNotes: ["Pineapple", "Bergamot", "Blackcurrant"],
+    heartNotes: ["Birch", "Jasmine", "Patchouli"],
+    baseNotes: ["Musk", "Oakmoss", "Ambergris"],
+    longevity: 93,
+    sillage: 91,
+    rating: 4.9,
+    reviews: 5120,
+    collection: "Archive",
+    tags: { drive: "power", element: "fresh", occasion: "boardroom" }
+  },
+  {
+    id: "16",
+    name: "Sauvage",
+    brand: "Dior",
+    subtitle: "Eau de Toilette",
+    description: "Raw and noble. A burst of fresh bergamot collides with ambroxan and woody trails for magnetic intensity.",
+    price: "$135",
+    image: sauvage,
+    topNotes: ["Calabrian Bergamot", "Pepper"],
+    heartNotes: ["Sichuan Pepper", "Lavender", "Patchouli"],
+    baseNotes: ["Ambroxan", "Cedar", "Labdanum"],
+    longevity: 87,
+    sillage: 89,
+    rating: 4.7,
+    reviews: 8904,
+    collection: "Core",
+    tags: { drive: "passion", element: "fresh", occasion: "evening" }
+  },
+  {
+    id: "17",
+    name: "Bleu de Chanel",
+    brand: "Chanel",
+    subtitle: "Eau de Parfum",
+    description: "A masculine balance of citrus and cedar. Clean, refined, and effortlessly elegant for every moment.",
+    price: "$155",
+    image: bleuDeChanel,
+    topNotes: ["Citrus", "Mint", "Pink Pepper"],
+    heartNotes: ["Ginger", "Nutmeg", "Jasmine"],
+    baseNotes: ["Cedar", "Sandalwood", "Frankincense"],
+    longevity: 90,
+    sillage: 83,
+    rating: 4.8,
+    reviews: 6782,
+    collection: "Core",
+    tags: { drive: "precision", element: "fresh", occasion: "boardroom" }
+  },
+  {
+    id: "18",
+    name: "La Nuit de L'Homme",
+    brand: "Yves Saint Laurent",
+    subtitle: "Eau de Toilette",
+    description: "The perfect tension between freshness and sensuality. Cardamom and cedar for the man who owns the night.",
+    price: "$125",
+    image: laNuit,
+    topNotes: ["Cardamom", "Bergamot", "Lavender"],
+    heartNotes: ["Virginia Cedar", "Bergamot"],
+    baseNotes: ["Vetiver", "Caraway", "Amber"],
+    longevity: 84,
+    sillage: 79,
+    rating: 4.6,
+    reviews: 4531,
+    collection: "Core",
+    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+  },
+  {
+    id: "19",
+    name: "Jazz Club",
+    brand: "Maison Margiela",
+    subtitle: "Eau de Toilette",
+    description: "The cozy atmosphere of a Brooklyn jazz club. Rum, tobacco, and vanilla wrapped in soft leather armchairs.",
+    price: "$165",
+    image: jazzClub,
+    topNotes: ["Pink Pepper", "Neroli", "Lemon"],
+    heartNotes: ["Rum", "Clary Sage", "Java Vetiver"],
+    baseNotes: ["Tobacco Leaf", "Vanilla", "Styrax"],
+    longevity: 86,
+    sillage: 77,
+    rating: 4.7,
+    reviews: 2104,
+    collection: "Limited",
+    tags: { drive: "passion", element: "amber", occasion: "intimate" }
+  },
+  {
+    id: "20",
+    name: "Gypsy Water",
+    brand: "Byredo",
+    subtitle: "Eau de Parfum",
+    description: "A glamorization of the Romani lifestyle. Fresh juniper, lemon, and deep sandalwood evoke a free spirit.",
+    price: "$290",
+    image: gypsyWater,
+    topNotes: ["Juniper", "Lemon", "Bergamot"],
+    heartNotes: ["Pine Needles", "Incense", "Orris Root"],
+    baseNotes: ["Sandalwood", "Vanilla", "Amber"],
+    longevity: 88,
+    sillage: 75,
+    rating: 4.8,
+    reviews: 1832,
+    collection: "Limited",
+    tags: { drive: "mystery", element: "fresh", occasion: "signature" }
+  }
+];
+
+export const brands = [...new Set(products.map((p) => p.brand))];
+export const collections = ["Core", "Limited", "Archive"] as const;

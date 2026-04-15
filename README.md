@@ -1,73 +1,75 @@
-# React + TypeScript + Vite
+# NOIR Perfume
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A luxury fragrance e-commerce storefront built with **React + TypeScript + Vite** on the frontend and **Hono** on the backend.
 
-Currently, two official plugins are available:
+## Current Status
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+### Frontend
+- **20-product catalogue** featuring house scents (NOIR, Maison Obscura, Attar Royal, Haus Alchemy) alongside iconic real-world fragrances (Tom Ford Lost Cherry, Creed Aventus, Dior Sauvage, Chanel Bleu de Chanel, and more).
+- **Responsive landing page** with glassmorphism design, gold-gradient accents, and premium animations (Framer Motion).
+- **Interactive Scent Finder quiz** — 3-step profiler that matches users to fragrances based on drive, element, and occasion.
+- **Live search overlay** with filtering by name, brand, and scent notes.
+- **Product showcase** with brand/collection filters, scent pyramids, longevity/sillage meters, and staggered grid animations.
+- **Cart system** (React Context + localStorage):
+  - Add to bag from any product card
+  - Slide-over cart drawer with quantity controls
+  - Live subtotal calculation
+  - Persistent cart across reloads
+- **Toast notifications** (Sonner) for add-to-bag and checkout feedback.
 
-## React Compiler
+### Backend
+- **Hono server** running on `http://localhost:3001`
+- RESTful API endpoints:
+  - `GET /api/health` — health check
+  - `GET /api/products` — full product list
+  - `GET /api/cart/:sessionId` — retrieve cart
+  - `POST /api/cart/:sessionId` — add/update cart item
+  - `DELETE /api/cart/:sessionId/:productId` — remove cart item
+  - `POST /api/checkout` — place order and clear cart
+  - `GET /api/orders` — list all orders
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Tech Stack
 
-## Expanding the ESLint configuration
+| Layer | Tech |
+|-------|------|
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, Framer Motion, shadcn/ui |
+| State | React Context, localStorage |
+| Backend | Hono, `@hono/node-server`, TypeScript |
+| Tools | ESLint, tsx, concurrently |
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## Running Locally
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+### Start both frontend and backend
+```bash
+npm run dev:full
+```
+- Frontend: `http://localhost:5173`
+- Backend: `http://localhost:3001`
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Start frontend only
+```bash
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Start backend only
+```bash
+npm run server
 ```
+
+### Build for production
+```bash
+npm run build
+```
+
+### Lint
+```bash
+npm run lint
+```
+
+## What's Next
+- [ ] Sync frontend cart with backend API using a session UUID
+- [ ] Swap in-memory storage for a real database (SQLite / PostgreSQL)
+- [ ] Add user authentication (JWT / Clerk / Auth0)
+- [ ] Integrate real payments (Stripe / PayPal)
+- [ ] Admin dashboard for order management
+- [ ] Email confirmations on checkout
