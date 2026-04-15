@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, SlidersHorizontal } from "lucide-react";
-import { products, brands } from "@/data/products";
+import { products, brands } from "@/data";
 
 interface SearchOverlayProps {
   open: boolean;

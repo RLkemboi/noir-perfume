@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, Clock, Volume2, ShieldCheck, Gem, History } from "lucide-react";
-import { products, brands, collections, type Product } from "@/data/products";
+import { products, brands, collections, type Product } from "@/data";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
+import { MarqueeBand } from "./MarqueeBand";
 
 const Meter = ({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) => (
   <div className="space-y-1.5">
@@ -176,67 +177,21 @@ const ProductShowcase = () => {
           </p>
         </motion.div>
 
-        {/* Filters */}
-        <div className="space-y-6 mb-12">
-          {/* Brand Filter */}
-          <div className="flex flex-col items-center gap-4">
-            <span className="text-[10px] tracking-[0.3em] uppercase text-muted-foreground font-bold">Filter by House</span>
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              <button
-                onClick={() => setActiveBrand(null)}
-                className={`px-5 py-1.5 text-[10px] tracking-[0.15em] uppercase font-sans font-bold rounded-full border transition-all duration-300 ${
-                  !activeBrand
-                    ? "border-primary bg-primary text-primary-foreground luxury-shadow"
-                    : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
-                }`}
-              >
-                All Houses
-              </button>
-              {brands.map((brand) => (
-                <button
-                  key={brand}
-                  onClick={() => setActiveBrand(activeBrand === brand ? null : brand)}
-                  className={`px-5 py-1.5 text-[10px] tracking-[0.15em] uppercase font-sans font-bold rounded-full border transition-all duration-300 ${
-                    activeBrand === brand
-                      ? "border-primary bg-primary text-primary-foreground luxury-shadow"
-                      : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
-                  }`}
-                >
-                  {brand}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Collection Filter */}
-          <div className="flex flex-col items-center gap-4">
-            <span className="text-[10px] tracking-[0.3em] uppercase text-muted-foreground font-bold">Filter by Collection</span>
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              <button
-                onClick={() => setActiveCollection(null)}
-                className={`px-5 py-1.5 text-[10px] tracking-[0.15em] uppercase font-sans font-bold rounded-full border transition-all duration-300 ${
-                  !activeCollection
-                    ? "border-primary bg-primary text-primary-foreground luxury-shadow"
-                    : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
-                }`}
-              >
-                Entire Collection
-              </button>
-              {collections.map((coll) => (
-                <button
-                  key={coll}
-                  onClick={() => setActiveCollection(activeCollection === coll ? null : coll)}
-                  className={`px-5 py-1.5 text-[10px] tracking-[0.15em] uppercase font-sans font-bold rounded-full border transition-all duration-300 ${
-                    activeCollection === coll
-                      ? "border-primary bg-primary text-primary-foreground luxury-shadow"
-                      : "border-border text-muted-foreground hover:text-foreground hover:border-primary/40"
-                  }`}
-                >
-                  {coll}
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* Marquee Filters */}
+        <div className="space-y-2 mb-12">
+          <MarqueeBand
+            items={["All Houses", ...brands]}
+            activeItem={activeBrand}
+            onSelect={(item) => setActiveBrand(item === "All Houses" ? null : item)}
+            speed={35}
+          />
+          <MarqueeBand
+            items={["Entire Collection", ...collections]}
+            activeItem={activeCollection}
+            onSelect={(item) => setActiveCollection(item === "Entire Collection" ? null : item)}
+            reverse
+            speed={40}
+          />
         </div>
 
         {/* Product Grid */}

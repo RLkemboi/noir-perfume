@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, ShoppingBag, User, Menu, X, ChevronDown } from "lucide-react";
+import { Link } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import SearchOverlay from "./SearchOverlay";
 
@@ -17,9 +18,9 @@ const Header = () => {
     <header className="fixed top-0 left-0 right-0 z-50 glass-header">
       <div className="container mx-auto px-6 py-4 flex items-center justify-between">
         {/* Logo */}
-        <a href="/" className="font-serif text-2xl tracking-[0.2em] gold-text font-bold">
+        <Link to="/" className="font-serif text-2xl tracking-[0.2em] gold-text font-bold">
           NOIR
-        </a>
+        </Link>
 
         {/* Desktop Nav */}
         <nav className="hidden lg:flex items-center gap-8">
@@ -85,7 +86,7 @@ const Header = () => {
                 <ul className="space-y-3">
                   {scentProfiles.map((s) => (
                     <li key={s}>
-                      <a href="#" className="text-foreground/70 hover:text-primary transition-colors text-sm">{s}</a>
+                      <a href="#" onClick={(e) => e.preventDefault()} className="text-foreground/70 hover:text-primary transition-colors text-sm">{s}</a>
                     </li>
                   ))}
                 </ul>
@@ -95,7 +96,7 @@ const Header = () => {
                 <ul className="space-y-3">
                   {moods.map((m) => (
                     <li key={m}>
-                      <a href="#" className="text-foreground/70 hover:text-primary transition-colors text-sm">{m}</a>
+                      <a href="#" onClick={(e) => e.preventDefault()} className="text-foreground/70 hover:text-primary transition-colors text-sm">{m}</a>
                     </li>
                   ))}
                 </ul>
@@ -105,7 +106,7 @@ const Header = () => {
                 <ul className="space-y-3">
                   {["For Him", "For Her", "Unisex", "Discovery Sets", "Gift Sets"].map((c) => (
                     <li key={c}>
-                      <a href="#" className="text-foreground/70 hover:text-primary transition-colors text-sm">{c}</a>
+                      <a href="#" onClick={(e) => e.preventDefault()} className="text-foreground/70 hover:text-primary transition-colors text-sm">{c}</a>
                     </li>
                   ))}
                 </ul>
@@ -125,7 +126,7 @@ const Header = () => {
             className="lg:hidden glass-panel border-t-0 overflow-hidden"
           >
             <nav className="flex flex-col px-6 py-6 gap-4">
-              <a href="#" className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Collections</a>
+              <a href="#" onClick={(e) => e.preventDefault()} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Collections</a>
               <a href="#scent-finder" className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Scent Finder</a>
               <a href="#products" className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Bestsellers</a>
               <a href="#story" className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Our Story</a>

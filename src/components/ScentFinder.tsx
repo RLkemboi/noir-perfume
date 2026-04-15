@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Flame, Wind, Sparkles, Crown, Moon, Briefcase, Heart } from "lucide-react";
-import { products } from "@/data/products";
+import { products } from "@/data";
 
 interface QuizOption {
   label: string;
@@ -70,7 +70,7 @@ const ScentFinder = () => {
     setAnswers(newAnswers);
 
     if (step < steps.length - 1) {
-      setTimeout(() => setStep(step + 1), 300);
+      setTimeout(() => setStep((s) => s + 1), 300);
     } else {
       setTimeout(() => setComplete(true), 300);
     }

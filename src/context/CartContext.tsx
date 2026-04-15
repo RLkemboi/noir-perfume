@@ -39,33 +39,26 @@ function generateSessionId(): string {
 }
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [items, setItems] = useState<CartItem[]>([]);
+  const [items, setItems] = useState<CartItem[]>(() => {
+    const raw = localStorage.getItem(CART_KEY);
+    if (raw) {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  });
   const [isOpen, setIsOpen] = useState(false);
-  const [sessionId, setSessionId] = useState<string>("");
-
-  // Initialize session
-  useEffect(() => {
+  const [sessionId] = useState<string>(() => {
     let sid = localStorage.getItem(SESSION_KEY);
     if (!sid) {
       sid = generateSessionId();
       localStorage.setItem(SESSION_KEY, sid);
     }
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSessionId(sid);
-  }, []);
-
-  // Load from localStorage
-  useEffect(() => {
-    const raw = localStorage.getItem(CART_KEY);
-    if (raw) {
-      try {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setItems(JSON.parse(raw));
-      } catch {
-        setItems([]);
-      }
-    }
-  }, []);
+    return sid;
+  });
 
   // Persist to localStorage
   useEffect(() => {

@@ -13,7 +13,7 @@ const Footer = () => {
             <h4 className="text-primary text-xs tracking-[0.2em] uppercase mb-4 font-sans font-semibold">Shop</h4>
             <ul className="space-y-2">
               {["All Fragrances", "For Him", "For Her", "Discovery Sets", "Gift Sets"].map((l) => (
-                <li key={l}><a href="#" className="text-muted-foreground hover:text-primary text-sm font-sans transition-colors">{l}</a></li>
+                <li key={l}><a href="#" onClick={(e) => e.preventDefault()} className="text-muted-foreground hover:text-primary text-sm font-sans transition-colors">{l}</a></li>
               ))}
             </ul>
           </div>
@@ -21,7 +21,7 @@ const Footer = () => {
             <h4 className="text-primary text-xs tracking-[0.2em] uppercase mb-4 font-sans font-semibold">Company</h4>
             <ul className="space-y-2">
               {["Our Story", "Ingredients", "Sustainability", "Press"].map((l) => (
-                <li key={l}><a href="#" className="text-muted-foreground hover:text-primary text-sm font-sans transition-colors">{l}</a></li>
+                <li key={l}><a href="#" onClick={(e) => e.preventDefault()} className="text-muted-foreground hover:text-primary text-sm font-sans transition-colors">{l}</a></li>
               ))}
             </ul>
           </div>
@@ -29,7 +29,7 @@ const Footer = () => {
             <h4 className="text-primary text-xs tracking-[0.2em] uppercase mb-4 font-sans font-semibold">Support</h4>
             <ul className="space-y-2">
               {["Contact", "Shipping & Returns", "FAQ", "Track Order"].map((l) => (
-                <li key={l}><a href="#" className="text-muted-foreground hover:text-primary text-sm font-sans transition-colors">{l}</a></li>
+                <li key={l}><a href="#" onClick={(e) => e.preventDefault()} className="text-muted-foreground hover:text-primary text-sm font-sans transition-colors">{l}</a></li>
               ))}
             </ul>
           </div>
@@ -39,7 +39,7 @@ const Footer = () => {
           <p className="text-muted-foreground text-xs font-sans">© 2026 NOIR. All rights reserved.</p>
           <div className="flex gap-6">
             {["Privacy", "Terms", "Cookies"].map((l) => (
-              <a key={l} href="#" className="text-muted-foreground hover:text-primary text-xs font-sans transition-colors">{l}</a>
+              <a key={l} href="#" onClick={(e) => e.preventDefault()} className="text-muted-foreground hover:text-primary text-xs font-sans transition-colors">{l}</a>
             ))}
           </div>
         </div>
