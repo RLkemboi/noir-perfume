@@ -19,19 +19,40 @@ interface CartContextType {
   subtotal: number;
   isOpen: boolean;
   setIsOpen: (open: boolean) => void;
+  sessionId: string;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 const CART_KEY = "noir-cart";
+const SESSION_KEY = "noir-session";
 
 function parsePrice(price: string): number {
   return Number(price.replace(/[^0-9.]/g, "")) || 0;
 }
 
+function generateSessionId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [sessionId, setSessionId] = useState<string>("");
+
+  // Initialize session
+  useEffect(() => {
+    let sid = localStorage.getItem(SESSION_KEY);
+    if (!sid) {
+      sid = generateSessionId();
+      localStorage.setItem(SESSION_KEY, sid);
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSessionId(sid);
+  }, []);
 
   // Load from localStorage
   useEffect(() => {
@@ -95,6 +116,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         subtotal,
         isOpen,
         setIsOpen,
+        sessionId,
       }}
     >
       {children}

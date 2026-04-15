@@ -4,15 +4,31 @@ import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
 
 export const CartDrawer = () => {
-  const { items, isOpen, setIsOpen, removeItem, updateQuantity, subtotal, clearCart } = useCart();
+  const { items, isOpen, setIsOpen, removeItem, updateQuantity, clearCart, subtotal, sessionId } = useCart();
 
-  const handleCheckout = () => {
-    if (items.length === 0) return;
-    toast.success("Checkout initiated", {
-      description: "This is a demo. Complete backend integration coming soon.",
-      className: "glass-panel border-primary/20",
-    });
-    setIsOpen(false);
+  const handleCheckout = async () => {
+    if (items.length === 0 || !sessionId) return;
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, items }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || "Checkout failed");
+      }
+      toast.success(`Order #${data.orderId} confirmed`, {
+        description: `Total: $${data.total}`,
+        className: "glass-panel border-primary/20",
+      });
+      clearCart();
+      setIsOpen(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Checkout failed", {
+        className: "glass-panel border-destructive/20",
+      });
+    }
   };
 
   const lineTotal = (price: string, qty: number) => {

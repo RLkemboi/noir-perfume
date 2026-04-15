@@ -91,26 +91,61 @@ const orders: Order[] = [];
 
 app.post("/api/checkout", async (c) => {
   const body = await c.req.json<{ sessionId: string; items: CartItem[] }>();
-  const total = body.items.reduce((sum, i) => {
-    const val = Number(i.price.replace(/[^0-9.]/g, "")) || 0;
-    return sum + val * i.quantity;
-  }, 0);
+  const { sessionId, items } = body;
+
+  if (!sessionId || !Array.isArray(items) || items.length === 0) {
+    return c.json({ success: false, error: "Invalid checkout payload" }, 400);
+  }
+
+  let total = 0;
+  const validatedItems: CartItem[] = [];
+
+  for (const item of items) {
+    const product = products.find((p) => p.id === item.productId);
+    if (!product) {
+      return c.json({ success: false, error: `Unknown product: ${item.productId}` }, 400);
+    }
+    const qty = Math.max(1, Math.floor(item.quantity || 1));
+    const price = Number(product.price.replace(/[^0-9.]/g, "")) || 0;
+    total += price * qty;
+    validatedItems.push({
+      productId: product.id,
+      name: product.name,
+      brand: product.brand,
+      price: product.price,
+      image: product.image,
+      quantity: qty,
+    });
+  }
 
   const order: Order = {
     orderId: orders.length + 1,
-    sessionId: body.sessionId,
-    items: body.items,
+    sessionId,
+    items: validatedItems,
     total: Number(total.toFixed(2)),
     createdAt: new Date().toISOString(),
   };
 
   orders.push(order);
-  carts.delete(body.sessionId);
+  carts.delete(sessionId);
 
   return c.json({ success: true, orderId: order.orderId, total: order.total });
 });
 
 app.get("/api/orders", (c) => c.json({ orders, count: orders.length }));
+
+app.get("/api/orders/session/:sessionId", (c) => {
+  const sessionId = c.req.param("sessionId");
+  const sessionOrders = orders.filter((o) => o.sessionId === sessionId);
+  return c.json({ orders: sessionOrders, count: sessionOrders.length });
+});
+
+app.get("/api/orders/:orderId", (c) => {
+  const orderId = Number(c.req.param("orderId"));
+  const order = orders.find((o) => o.orderId === orderId);
+  if (!order) return c.json({ error: "Order not found" }, 404);
+  return c.json({ order });
+});
 
 const port = Number(process.env.PORT) || 3001;
 console.log(`🖤 NOIR Server running at http://localhost:${port}`);
