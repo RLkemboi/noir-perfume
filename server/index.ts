@@ -5,6 +5,9 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { products } from "./data/products.js";
+import type { CartItem, Order } from "./types.js";
+import { getCart, setCart, deleteCart } from "./db/carts.js";
+import { createOrder, getOrders, getOrdersBySession, getOrderById } from "./db/orders.js";
 
 const app = new Hono();
 
@@ -32,18 +35,6 @@ app.get("/api/health", (c) => c.json({ status: "ok", timestamp: new Date().toISO
 // Products
 app.get("/api/products", (c) => c.json({ products, count: products.length }));
 
-// Cart (in-memory storage)
-export type CartItem = {
-  productId: string;
-  name: string;
-  brand: string;
-  price: string;
-  image: string;
-  quantity: number;
-};
-
-const carts = new Map<string, CartItem[]>();
-
 function parsePrice(price: string): number {
   return Number(price.replace(/[^0-9.]/g, "")) || 0;
 }
@@ -54,9 +45,9 @@ function getCartTotals(items: CartItem[]) {
   return { count, total: Number(total.toFixed(2)) };
 }
 
-app.get("/api/cart/:sessionId", (c) => {
+app.get("/api/cart/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
-  const items = carts.get(sessionId) || [];
+  const items = await getCart(sessionId);
   return c.json({ items, ...getCartTotals(items) });
 });
 
@@ -76,7 +67,7 @@ app.post("/api/cart/:sessionId", async (c) => {
     throw new HTTPException(400, { message: "Invalid JSON body" });
   }
 
-  const current = carts.get(sessionId) || [];
+  const current = await getCart(sessionId);
   const existing = current.find((i) => i.productId === body.productId);
   const qty = Math.max(1, Math.floor(body.quantity || 1));
 
@@ -89,7 +80,7 @@ app.post("/api/cart/:sessionId", async (c) => {
     items = [...current, { ...body, quantity: qty }];
   }
 
-  carts.set(sessionId, items);
+  await setCart(sessionId, items);
   return c.json({ items, ...getCartTotals(items) });
 });
 
@@ -103,7 +94,7 @@ app.put("/api/cart/:sessionId/:productId", async (c) => {
     throw new HTTPException(400, { message: "Invalid JSON body" });
   }
 
-  const current = carts.get(sessionId) || [];
+  const current = await getCart(sessionId);
   const qty = Math.max(0, Math.floor(body.quantity || 0));
 
   let items: CartItem[];
@@ -115,36 +106,26 @@ app.put("/api/cart/:sessionId/:productId", async (c) => {
     );
   }
 
-  carts.set(sessionId, items);
+  await setCart(sessionId, items);
   return c.json({ items, ...getCartTotals(items) });
 });
 
-app.delete("/api/cart/:sessionId/:productId", (c) => {
+app.delete("/api/cart/:sessionId/:productId", async (c) => {
   const sessionId = c.req.param("sessionId");
   const productId = c.req.param("productId");
-  const current = carts.get(sessionId) || [];
+  const current = await getCart(sessionId);
   const items = current.filter((i) => i.productId !== productId);
-  carts.set(sessionId, items);
+  await setCart(sessionId, items);
   return c.json({ items, ...getCartTotals(items) });
 });
 
-app.delete("/api/cart/:sessionId", (c) => {
+app.delete("/api/cart/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
-  carts.delete(sessionId);
+  await deleteCart(sessionId);
   return c.json({ items: [], count: 0, total: 0 });
 });
 
 // Checkout
-interface Order {
-  orderId: number;
-  sessionId: string;
-  items: CartItem[];
-  total: number;
-  createdAt: string;
-}
-
-const orders: Order[] = [];
-
 app.post("/api/checkout", async (c) => {
   let body: { sessionId: string; items: CartItem[] };
   try {
@@ -179,34 +160,29 @@ app.post("/api/checkout", async (c) => {
     });
   }
 
-  const order: Order = {
-    orderId: orders.length + 1,
-    sessionId,
-    items: validatedItems,
-    total: Number(total.toFixed(2)),
-    createdAt: new Date().toISOString(),
-  };
-
-  orders.push(order);
-  carts.delete(sessionId);
+  const order = await createOrder(sessionId, validatedItems, Number(total.toFixed(2)));
+  await deleteCart(sessionId);
 
   return c.json({ success: true, orderId: order.orderId, total: order.total });
 });
 
-app.get("/api/orders", (c) => c.json({ orders, count: orders.length }));
-
-app.get("/api/orders/session/:sessionId", (c) => {
-  const sessionId = c.req.param("sessionId");
-  const sessionOrders = orders.filter((o) => o.sessionId === sessionId);
-  return c.json({ orders: sessionOrders, count: sessionOrders.length });
+app.get("/api/orders", async (c) => {
+  const orders = await getOrders();
+  return c.json({ orders, count: orders.length });
 });
 
-app.get("/api/orders/:orderId", (c) => {
+app.get("/api/orders/session/:sessionId", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const orders = await getOrdersBySession(sessionId);
+  return c.json({ orders, count: orders.length });
+});
+
+app.get("/api/orders/:orderId", async (c) => {
   const orderId = Number(c.req.param("orderId"));
   if (!Number.isFinite(orderId)) {
     throw new HTTPException(400, { message: "Invalid order ID" });
   }
-  const order = orders.find((o) => o.orderId === orderId);
+  const order = await getOrderById(orderId);
   if (!order) throw new HTTPException(404, { message: "Order not found" });
   return c.json({ order });
 });

@@ -39,17 +39,7 @@ function generateSessionId(): string {
 }
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [items, setItems] = useState<CartItem[]>(() => {
-    const raw = localStorage.getItem(CART_KEY);
-    if (raw) {
-      try {
-        return JSON.parse(raw);
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  });
+  const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [sessionId] = useState<string>(() => {
     let sid = localStorage.getItem(SESSION_KEY);
@@ -60,12 +50,37 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return sid;
   });
 
+  // Load cart from server on mount (fallback to localStorage)
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/cart/${sessionId}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data) => {
+        if (!cancelled && Array.isArray(data?.items)) {
+          setItems(data.items);
+        }
+      })
+      .catch(() => {
+        const raw = localStorage.getItem(CART_KEY);
+        if (!cancelled && raw) {
+          try {
+            setItems(JSON.parse(raw));
+          } catch {
+            // ignore parse error
+          }
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId]);
+
   // Persist to localStorage
   useEffect(() => {
     localStorage.setItem(CART_KEY, JSON.stringify(items));
   }, [items]);
 
-  const addItem = (item: Omit<CartItem, "quantity">) => {
+  const addItem = async (item: Omit<CartItem, "quantity">) => {
     setItems((prev) => {
       const existing = prev.find((i) => i.productId === item.productId);
       if (existing) {
@@ -76,13 +91,30 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return [...prev, { ...item, quantity: 1 }];
     });
     setIsOpen(true);
+
+    try {
+      await fetch(`/api/cart/${sessionId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...item, quantity: 1 }),
+      });
+    } catch {
+      // Silently fail; local state is already updated
+    }
   };
 
-  const removeItem = (productId: string) => {
+  const removeItem = async (productId: string) => {
     setItems((prev) => prev.filter((i) => i.productId !== productId));
+    try {
+      await fetch(`/api/cart/${sessionId}/${productId}`, {
+        method: "DELETE",
+      });
+    } catch {
+      // Silently fail
+    }
   };
 
-  const updateQuantity = (productId: string, quantity: number) => {
+  const updateQuantity = async (productId: string, quantity: number) => {
     if (quantity < 1) {
       removeItem(productId);
       return;
@@ -90,9 +122,27 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setItems((prev) =>
       prev.map((i) => (i.productId === productId ? { ...i, quantity } : i))
     );
+    try {
+      await fetch(`/api/cart/${sessionId}/${productId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quantity }),
+      });
+    } catch {
+      // Silently fail
+    }
   };
 
-  const clearCart = () => setItems([]);
+  const clearCart = async () => {
+    setItems([]);
+    try {
+      await fetch(`/api/cart/${sessionId}`, {
+        method: "DELETE",
+      });
+    } catch {
+      // Silently fail
+    }
+  };
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
   const subtotal = items.reduce((sum, i) => sum + parsePrice(i.price) * i.quantity, 0);

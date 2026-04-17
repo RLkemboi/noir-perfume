@@ -151,6 +151,33 @@
   .animate-pulse-gold {
     animation: pulse-gold 4s ease-in-out infinite;
   }
+
+  .image-shine {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .image-shine::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      120deg,
+      transparent 30%,
+      hsl(43 80% 70% / 0.35) 45%,
+      hsl(43 90% 85% / 0.55) 50%,
+      hsl(43 80% 70% / 0.35) 55%,
+      transparent 70%
+    );
+    transform: translateX(-120%) skewX(-20deg);
+    transition: transform 0.8s ease;
+    pointer-events: none;
+  }
+
+  .group:hover .image-shine::after,
+  .image-shine:hover::after {
+    transform: translateX(120%) skewX(-20deg);
+  }
 }
 
 /* Scrollbar styling */

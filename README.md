@@ -43,9 +43,23 @@ A luxury fragrance e-commerce storefront built with **React + TypeScript + Vite*
 | Frontend | React 19, TypeScript, Vite, Tailwind CSS, Framer Motion, shadcn/ui |
 | State | React Context, localStorage |
 | Backend | Hono, `@hono/node-server`, TypeScript |
+| Database | Firebase Firestore |
 | Tools | ESLint, tsx, concurrently |
 
+## Firebase Setup
+
+1. Go to [Firebase Console](https://console.firebase.google.com/) and create a project.
+2. Open **Project Settings → Service Accounts**.
+3. Click **Generate new private key** and download the JSON file.
+4. Copy the values into your `.env` file:
+   - `FIREBASE_PROJECT_ID`
+   - `FIREBASE_PRIVATE_KEY`
+   - `FIREBASE_CLIENT_EMAIL`
+5. (Optional) In Firestore Database, create the database in **native mode**.
+
 ## Running Locally
+
+> **Note:** The backend now requires Firebase credentials in `.env`.
 
 ### Start both frontend and backend
 ```bash
@@ -75,7 +89,7 @@ npm run lint
 ```
 
 ## What's Next
-- [ ] Swap in-memory storage for a real database (SQLite / PostgreSQL)
+- [x] Swap in-memory storage for a real database (Firebase Firestore)
 - [ ] Add user authentication (JWT / Clerk / Auth0)
 - [ ] Integrate real payments (Stripe / PayPal)
 - [ ] Admin dashboard for order management

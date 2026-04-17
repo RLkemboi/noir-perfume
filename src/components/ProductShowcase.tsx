@@ -54,7 +54,7 @@ const ProductCard = ({ product, index }: { product: Product; index: number }) =>
     className="glass-panel group overflow-hidden flex flex-col h-full"
   >
     {/* Image Container */}
-    <div className="relative aspect-[4/5] overflow-hidden">
+    <div className="relative aspect-[4/5] overflow-hidden image-shine">
       <img
         src={product.image}
         alt={product.name}
