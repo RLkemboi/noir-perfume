@@ -1,9 +1,11 @@
 import "dotenv/config";
 import { serve } from "@hono/node-server";
 import type { ServerType } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
+import { readFileSync } from "fs";
 import { products } from "./data/products.js";
 import type { CartItem, Order } from "./types.js";
 import { getCart, setCart, deleteCart } from "./db/carts.js";
@@ -185,6 +187,14 @@ app.get("/api/orders/:orderId", async (c) => {
   const order = await getOrderById(orderId);
   if (!order) throw new HTTPException(404, { message: "Order not found" });
   return c.json({ order });
+});
+
+// Serve built frontend assets
+app.use("*", serveStatic({ root: "./dist" }));
+
+// SPA fallback for React Router
+app.get("*", (c) => {
+  return c.html(readFileSync("./dist/index.html", "utf-8"));
 });
 
 const port = Number(process.env.PORT) || 3001;
