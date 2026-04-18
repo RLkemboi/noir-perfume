@@ -6,6 +6,9 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  GoogleAuthProvider,
+  OAuthProvider,
+  signInWithPopup,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
 
@@ -18,6 +21,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   getIdToken: () => Promise<string | null>;
   resetPassword: (email: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
+  signInWithApple: () => Promise<void>;
   continueAsGuest: () => void;
 }
 
@@ -104,6 +109,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await sendPasswordResetEmail(auth, email);
   };
 
+  const signInWithGoogle = async () => {
+    if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
+    const provider = new GoogleAuthProvider();
+    await signInWithPopup(auth, provider);
+    setIsGuest(false);
+    safeRemove(GUEST_KEY);
+  };
+
+  const signInWithApple = async () => {
+    if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
+    const provider = new OAuthProvider("apple.com");
+    provider.addScope("email");
+    provider.addScope("name");
+    await signInWithPopup(auth, provider);
+    setIsGuest(false);
+    safeRemove(GUEST_KEY);
+  };
+
   const continueAsGuest = () => {
     setIsGuest(true);
     safeSet(GUEST_KEY, "true");
@@ -111,7 +134,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, isGuest, login, register, logout, getIdToken, resetPassword, continueAsGuest }}
+      value={{ user, loading, isGuest, login, register, logout, getIdToken, resetPassword, signInWithGoogle, signInWithApple, continueAsGuest }}
     >
       {children}
     </AuthContext.Provider>
