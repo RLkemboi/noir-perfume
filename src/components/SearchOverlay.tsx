@@ -14,12 +14,13 @@ const SearchOverlay = ({ open, onClose }: SearchOverlayProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) {
-      setTimeout(() => inputRef.current?.focus(), 100);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!open) return;
+    const id = setTimeout(() => {
+      inputRef.current?.focus();
       setQuery("");
       setSelectedBrand(null);
-    }
+    }, 100);
+    return () => clearTimeout(id);
   }, [open]);
 
   useEffect(() => {
@@ -115,7 +116,7 @@ const SearchOverlay = ({ open, onClose }: SearchOverlayProps) => {
                 results.map((product, i) => (
                   <motion.a
                     key={product.id}
-                    href={`#product-${product.id}`}
+                    href={`/#product-${product.id}`}
                     onClick={onClose}
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}

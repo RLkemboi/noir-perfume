@@ -135,12 +135,13 @@ const Header = () => {
             className="lg:hidden glass-panel border-t-0 overflow-hidden"
           >
             <nav className="flex flex-col px-6 py-6 gap-4">
-              <a href="#" onClick={(e) => e.preventDefault()} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Collections</a>
-              <a href="#scent-finder" className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Scent Finder</a>
-              <a href="#products" className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Bestsellers</a>
-              <a href="#story" className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Our Story</a>
+              <a href="#products" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Collections</a>
+              <a href="#scent-finder" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Scent Finder</a>
+              <a href="#products" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Bestsellers</a>
+              <a href="#story" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Our Story</a>
               <Link
                 to={user || isGuest ? "/dashboard" : "/login"}
+                onClick={() => setMobileOpen(false)}
                 className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2"
               >
                 {user ? "My Account" : isGuest ? "Guest Session" : "Sign In"}

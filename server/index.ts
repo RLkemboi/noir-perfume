@@ -48,14 +48,24 @@ function getCartTotals(items: CartItem[]) {
   return { count, total: Number(total.toFixed(2)) };
 }
 
+function isValidUUID(v: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+}
+
 app.get("/api/cart/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
+  if (!isValidUUID(sessionId)) {
+    throw new HTTPException(400, { message: "Invalid session ID" });
+  }
   const items = await getCart(sessionId);
   return c.json({ items, ...getCartTotals(items) });
 });
 
 app.post("/api/cart/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
+  if (!isValidUUID(sessionId)) {
+    throw new HTTPException(400, { message: "Invalid session ID" });
+  }
   let body: {
     productId: string;
     quantity?: number;
@@ -89,6 +99,9 @@ app.post("/api/cart/:sessionId", async (c) => {
 
 app.put("/api/cart/:sessionId/:productId", async (c) => {
   const sessionId = c.req.param("sessionId");
+  if (!isValidUUID(sessionId)) {
+    throw new HTTPException(400, { message: "Invalid session ID" });
+  }
   const productId = c.req.param("productId");
   let body: { quantity?: number };
   try {
@@ -115,6 +128,9 @@ app.put("/api/cart/:sessionId/:productId", async (c) => {
 
 app.delete("/api/cart/:sessionId/:productId", async (c) => {
   const sessionId = c.req.param("sessionId");
+  if (!isValidUUID(sessionId)) {
+    throw new HTTPException(400, { message: "Invalid session ID" });
+  }
   const productId = c.req.param("productId");
   const current = await getCart(sessionId);
   const items = current.filter((i) => i.productId !== productId);
@@ -124,6 +140,9 @@ app.delete("/api/cart/:sessionId/:productId", async (c) => {
 
 app.delete("/api/cart/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
+  if (!isValidUUID(sessionId)) {
+    throw new HTTPException(400, { message: "Invalid session ID" });
+  }
   await deleteCart(sessionId);
   return c.json({ items: [], count: 0, total: 0 });
 });

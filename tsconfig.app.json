@@ -28,5 +28,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "server/types.ts"]
+  "include": ["src", "server/types.ts", "server/data/products.ts"]
 }

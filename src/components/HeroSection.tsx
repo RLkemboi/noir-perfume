@@ -1,5 +1,4 @@
 import { motion } from "framer-motion";
-import heroImage from "@/assets/hero-perfume.jpg";
 
 const HeroSection = () => {
   return (
@@ -14,7 +13,7 @@ const HeroSection = () => {
       {/* Hero image */}
       <div className="absolute inset-0 flex items-center justify-center">
         <motion.img
-          src={heroImage}
+          src="/assets/hero-perfume.jpg"
           alt="Luxury perfume with raw ingredients"
           className="w-full h-full object-cover opacity-40"
           initial={{ scale: 1.1 }}
