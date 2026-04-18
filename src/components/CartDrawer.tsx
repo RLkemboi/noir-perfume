@@ -6,20 +6,20 @@ import { toast } from "sonner";
 
 export const CartDrawer = () => {
   const { items, isOpen, setIsOpen, removeItem, updateQuantity, clearCart, subtotal, sessionId } = useCart();
-  const { user } = useAuth();
+  const { user, getIdToken } = useAuth();
 
   const handleCheckout = async () => {
     if (items.length === 0 || !sessionId) return;
     try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (user) {
+        const token = await getIdToken();
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+      }
       const res = await fetch("/api/checkout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId,
-          items,
-          userId: user?.uid || undefined,
-          userEmail: user?.email || undefined,
-        }),
+        headers,
+        body: JSON.stringify({ sessionId, items }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {

@@ -130,13 +130,13 @@ app.delete("/api/cart/:sessionId", async (c) => {
 
 // Checkout
 app.post("/api/checkout", async (c) => {
-  let body: { sessionId: string; items: CartItem[]; userId?: string; userEmail?: string };
+  let body: { sessionId: string; items: CartItem[] };
   try {
     body = await c.req.json();
   } catch {
     throw new HTTPException(400, { message: "Invalid JSON body" });
   }
-  const { sessionId, items, userId, userEmail } = body;
+  const { sessionId, items } = body;
 
   if (!sessionId || !Array.isArray(items) || items.length === 0) {
     throw new HTTPException(400, { message: "Invalid checkout payload" });
@@ -161,6 +161,21 @@ app.post("/api/checkout", async (c) => {
       image: product.image,
       quantity: qty,
     });
+  }
+
+  // Verify Firebase token server-side to derive userId/userEmail securely
+  let userId: string | undefined;
+  let userEmail: string | undefined;
+  const authHeader = c.req.header("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  if (token && auth) {
+    try {
+      const decoded = await auth.verifyIdToken(token);
+      userId = decoded.uid;
+      userEmail = decoded.email || undefined;
+    } catch {
+      throw new HTTPException(401, { message: "Invalid authentication token" });
+    }
   }
 
   const order = await createOrder(sessionId, validatedItems, Number(total.toFixed(2)), userId, userEmail);
