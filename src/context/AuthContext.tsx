@@ -73,14 +73,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (email: string, password: string) => {
-    if (!auth) throw new Error("Firebase Auth is not configured");
+    if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
     await signInWithEmailAndPassword(auth, email, password);
     setIsGuest(false);
     safeRemove(GUEST_KEY);
   };
 
   const register = async (email: string, password: string) => {
-    if (!auth) throw new Error("Firebase Auth is not configured");
+    if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
     await createUserWithEmailAndPassword(auth, email, password);
     setIsGuest(false);
     safeRemove(GUEST_KEY);
@@ -100,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const resetPassword = async (email: string) => {
-    if (!auth) throw new Error("Firebase Auth is not configured");
+    if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
     await sendPasswordResetEmail(auth, email);
   };
 
