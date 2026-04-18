@@ -9,7 +9,7 @@ import { readFileSync } from "fs";
 import { products } from "./data/products.js";
 import type { CartItem } from "./types.js";
 import { getCart, setCart, deleteCart } from "./db/carts.js";
-import { createOrder, getOrders, getOrdersBySession, getOrderById, getOrdersByUser } from "./db/orders.js";
+import { createOrder, getOrdersBySession, getOrderById, getOrdersByUser } from "./db/orders.js";
 import { auth } from "./db/firebase.js";
 
 const app = new Hono();
@@ -184,10 +184,7 @@ app.post("/api/checkout", async (c) => {
   return c.json({ success: true, orderId: order.orderId, total: order.total });
 });
 
-app.get("/api/orders", async (c) => {
-  const orders = await getOrders();
-  return c.json({ orders, count: orders.length });
-});
+
 
 app.get("/api/orders/session/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
