@@ -38,14 +38,30 @@ function generateSessionId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+function safeGet(key: string): string | null {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function safeSet(key: string, value: string): void {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // ignore
+  }
+}
+
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>([]);
   const [isOpen, setIsOpen] = useState(false);
   const [sessionId] = useState<string>(() => {
-    let sid = localStorage.getItem(SESSION_KEY);
+    let sid = safeGet(SESSION_KEY);
     if (!sid) {
       sid = generateSessionId();
-      localStorage.setItem(SESSION_KEY, sid);
+      safeSet(SESSION_KEY, sid);
     }
     return sid;
   });
@@ -61,7 +77,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       })
       .catch(() => {
-        const raw = localStorage.getItem(CART_KEY);
+        const raw = safeGet(CART_KEY);
         if (!cancelled && raw) {
           try {
             setItems(JSON.parse(raw));
@@ -77,7 +93,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Persist to localStorage
   useEffect(() => {
-    localStorage.setItem(CART_KEY, JSON.stringify(items));
+    safeSet(CART_KEY, JSON.stringify(items));
   }, [items]);
 
   const addItem = async (item: Omit<CartItem, "quantity">) => {

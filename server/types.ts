@@ -13,4 +13,6 @@ export interface Order {
   items: CartItem[];
   total: number;
   createdAt: string;
+  userId?: string;
+  userEmail?: string;
 }

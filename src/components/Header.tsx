@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Search, ShoppingBag, User, Menu, X, ChevronDown } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
 import SearchOverlay from "./SearchOverlay";
 
 const scentProfiles = ["Oud & Leather", "Amber & Spice", "Fresh & Aquatic", "Floral & Powdery"];
@@ -13,6 +14,7 @@ const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { totalItems, setIsOpen } = useCart();
+  const { user, isGuest } = useAuth();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-header">
@@ -47,9 +49,16 @@ const Header = () => {
           <button onClick={() => setSearchOpen(true)} className="text-foreground/70 hover:text-primary transition-colors">
             <Search className="w-5 h-5" />
           </button>
-          <button className="hidden sm:block text-foreground/70 hover:text-primary transition-colors">
+          <Link
+            to={user || isGuest ? "/dashboard" : "/login"}
+            className="hidden sm:flex items-center gap-1.5 text-foreground/70 hover:text-primary transition-colors"
+            aria-label={user ? "My account" : isGuest ? "Guest session" : "Sign in"}
+          >
             <User className="w-5 h-5" />
-          </button>
+            {isGuest && (
+              <span className="text-[10px] tracking-widest uppercase font-bold text-primary/70">Guest</span>
+            )}
+          </Link>
           <button
             onClick={() => setIsOpen(true)}
             className="relative text-foreground/70 hover:text-primary transition-colors"
@@ -130,6 +139,12 @@ const Header = () => {
               <a href="#scent-finder" className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Scent Finder</a>
               <a href="#products" className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Bestsellers</a>
               <a href="#story" className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Our Story</a>
+              <Link
+                to={user || isGuest ? "/dashboard" : "/login"}
+                className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2"
+              >
+                {user ? "My Account" : isGuest ? "Guest Session" : "Sign In"}
+              </Link>
             </nav>
           </motion.div>
         )}

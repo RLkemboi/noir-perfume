@@ -10,7 +10,9 @@ const metadataDoc = db?.collection("metadata").doc("counters");
 export async function createOrder(
   sessionId: string,
   items: CartItem[],
-  total: number
+  total: number,
+  userId?: string,
+  userEmail?: string
 ): Promise<Order> {
   if (!ordersCollection || !metadataDoc) {
     memoryOrderId += 1;
@@ -20,6 +22,8 @@ export async function createOrder(
       items,
       total,
       createdAt: new Date().toISOString(),
+      userId,
+      userEmail,
     };
     memoryOrders.set(memoryOrderId, order);
     return order;
@@ -39,6 +43,8 @@ export async function createOrder(
     items,
     total,
     createdAt: new Date().toISOString(),
+    userId,
+    userEmail,
   };
 
   await ordersCollection.doc(String(orderId)).set(order);
@@ -61,6 +67,19 @@ export async function getOrdersBySession(sessionId: string): Promise<Order[]> {
   }
   const snapshot = await ordersCollection
     .where("sessionId", "==", sessionId)
+    .orderBy("orderId", "asc")
+    .get();
+  return snapshot.docs.map((d) => d.data() as Order);
+}
+
+export async function getOrdersByUser(userId: string): Promise<Order[]> {
+  if (!ordersCollection) {
+    return Array.from(memoryOrders.values())
+      .filter((o) => o.userId === userId)
+      .sort((a, b) => a.orderId - b.orderId);
+  }
+  const snapshot = await ordersCollection
+    .where("userId", "==", userId)
     .orderBy("orderId", "asc")
     .get();
   return snapshot.docs.map((d) => d.data() as Order);

@@ -7,9 +7,10 @@ import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { readFileSync } from "fs";
 import { products } from "./data/products.js";
-import type { CartItem, Order } from "./types.js";
+import type { CartItem } from "./types.js";
 import { getCart, setCart, deleteCart } from "./db/carts.js";
-import { createOrder, getOrders, getOrdersBySession, getOrderById } from "./db/orders.js";
+import { createOrder, getOrders, getOrdersBySession, getOrderById, getOrdersByUser } from "./db/orders.js";
+import { auth } from "./db/firebase.js";
 
 const app = new Hono();
 
@@ -17,7 +18,7 @@ app.use(
   cors({
     origin: ["http://localhost:5173", "http://localhost:4173", "http://localhost:3000"],
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type"],
+    allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
 );
@@ -129,13 +130,13 @@ app.delete("/api/cart/:sessionId", async (c) => {
 
 // Checkout
 app.post("/api/checkout", async (c) => {
-  let body: { sessionId: string; items: CartItem[] };
+  let body: { sessionId: string; items: CartItem[]; userId?: string; userEmail?: string };
   try {
     body = await c.req.json();
   } catch {
     throw new HTTPException(400, { message: "Invalid JSON body" });
   }
-  const { sessionId, items } = body;
+  const { sessionId, items, userId, userEmail } = body;
 
   if (!sessionId || !Array.isArray(items) || items.length === 0) {
     throw new HTTPException(400, { message: "Invalid checkout payload" });
@@ -162,7 +163,7 @@ app.post("/api/checkout", async (c) => {
     });
   }
 
-  const order = await createOrder(sessionId, validatedItems, Number(total.toFixed(2)));
+  const order = await createOrder(sessionId, validatedItems, Number(total.toFixed(2)), userId, userEmail);
   await deleteCart(sessionId);
 
   return c.json({ success: true, orderId: order.orderId, total: order.total });
@@ -187,6 +188,26 @@ app.get("/api/orders/:orderId", async (c) => {
   const order = await getOrderById(orderId);
   if (!order) throw new HTTPException(404, { message: "Order not found" });
   return c.json({ order });
+});
+
+app.get("/api/orders/me", async (c) => {
+  const authHeader = c.req.header("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    throw new HTTPException(401, { message: "Unauthorized" });
+  }
+  const idToken = authHeader.slice(7);
+  let decoded;
+  try {
+    if (!auth) {
+      throw new HTTPException(503, { message: "Auth service unavailable" });
+    }
+    decoded = await auth.verifyIdToken(idToken);
+  } catch {
+    throw new HTTPException(401, { message: "Invalid token" });
+  }
+  const userId = decoded.uid;
+  const orders = await getOrdersByUser(userId);
+  return c.json({ orders, count: orders.length });
 });
 
 // Serve built frontend assets

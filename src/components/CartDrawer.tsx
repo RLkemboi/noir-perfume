@@ -1,10 +1,12 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Plus, Minus, ShoppingBag, Trash2 } from "lucide-react";
 import { useCart } from "@/context/CartContext";
+import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 
 export const CartDrawer = () => {
   const { items, isOpen, setIsOpen, removeItem, updateQuantity, clearCart, subtotal, sessionId } = useCart();
+  const { user } = useAuth();
 
   const handleCheckout = async () => {
     if (items.length === 0 || !sessionId) return;
@@ -12,7 +14,12 @@ export const CartDrawer = () => {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, items }),
+        body: JSON.stringify({
+          sessionId,
+          items,
+          userId: user?.uid || undefined,
+          userEmail: user?.email || undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
