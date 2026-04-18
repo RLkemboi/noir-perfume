@@ -18,11 +18,13 @@ try {
   if (hasConfig) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
-  } else {
+  } else if (import.meta.env.DEV) {
     console.warn("[Firebase] Client config missing. Auth features will be unavailable.");
   }
 } catch (err) {
-  console.warn("[Firebase] Initialization failed:", err instanceof Error ? err.message : err);
+  if (import.meta.env.DEV) {
+    console.warn("[Firebase] Initialization failed:", err instanceof Error ? err.message : err);
+  }
 }
 
 export { app, auth };

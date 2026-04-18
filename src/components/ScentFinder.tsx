@@ -185,7 +185,7 @@ const ScentFinder = () => {
                       </p>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                      <a href="#products" className="px-8 py-3 bg-primary text-primary-foreground font-sans text-sm tracking-[0.15em] uppercase font-semibold hover:bg-gold-light transition-colors">
+                      <a href={`#product-${matchedProduct.id}`} className="px-8 py-3 bg-primary text-primary-foreground font-sans text-sm tracking-[0.15em] uppercase font-semibold hover:bg-gold-light transition-colors">
                         View Fragrance
                       </a>
                       <button onClick={reset} className="px-8 py-3 gold-border text-primary font-sans text-sm tracking-[0.15em] uppercase font-semibold hover:bg-primary/10 transition-colors">

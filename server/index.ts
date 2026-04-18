@@ -207,6 +207,9 @@ app.post("/api/checkout", async (c) => {
 
 app.get("/api/orders/session/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
+  if (!isValidUUID(sessionId)) {
+    throw new HTTPException(400, { message: "Invalid session ID" });
+  }
   const orders = await getOrdersBySession(sessionId);
   return c.json({ orders, count: orders.length });
 });
@@ -244,8 +247,11 @@ app.get("/api/orders/me", async (c) => {
 // Serve built frontend assets
 app.use("*", serveStatic({ root: "./dist" }));
 
-// SPA fallback for React Router
-app.get("*", (c) => {
+// API 404 handler
+app.notFound((c) => {
+  if (c.req.path.startsWith("/api/")) {
+    return c.json({ error: "Not found" }, 404);
+  }
   return c.html(readFileSync("./dist/index.html", "utf-8"));
 });
 

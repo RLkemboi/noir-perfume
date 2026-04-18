@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from "react";
+import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import { products, brands } from "@/data";
@@ -71,9 +72,10 @@ const SearchOverlay = ({ open, onClose }: SearchOverlayProps) => {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search fragrances, notes, brands…"
+                aria-label="Search fragrances"
                 className="flex-1 bg-transparent text-foreground text-lg font-sans placeholder:text-muted-foreground focus:outline-none"
               />
-              <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+              <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors" aria-label="Close search">
                 <X className="w-5 h-5" />
               </button>
             </div>
@@ -113,14 +115,11 @@ const SearchOverlay = ({ open, onClose }: SearchOverlayProps) => {
                   No fragrances found. Try a different search.
                 </p>
               ) : (
-                results.map((product, i) => (
-                  <motion.a
+                results.map((product) => (
+                  <Link
                     key={product.id}
-                    href={`/#product-${product.id}`}
+                    to={`/#product-${product.id}`}
                     onClick={onClose}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
                     className="flex items-center gap-4 p-3 rounded-lg hover:bg-secondary/50 transition-colors group"
                   >
                     <img
@@ -140,7 +139,7 @@ const SearchOverlay = ({ open, onClose }: SearchOverlayProps) => {
                     <span className="font-serif text-sm gold-text font-bold shrink-0">
                       {product.price}
                     </span>
-                  </motion.a>
+                  </Link>
                 ))
               )}
             </div>

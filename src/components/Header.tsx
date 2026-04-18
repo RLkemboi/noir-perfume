@@ -29,7 +29,12 @@ const Header = () => {
           <button
             onMouseEnter={() => setMegaOpen(true)}
             onMouseLeave={() => setMegaOpen(false)}
+            onFocus={() => setMegaOpen(true)}
+            onBlur={() => setMegaOpen(false)}
             className="flex items-center gap-1 text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors"
+            aria-expanded={megaOpen}
+            aria-haspopup="true"
+            aria-label="Collections menu"
           >
             Collections <ChevronDown className="w-3 h-3" />
           </button>
@@ -46,7 +51,7 @@ const Header = () => {
 
         {/* Actions */}
         <div className="flex items-center gap-5">
-          <button onClick={() => setSearchOpen(true)} className="text-foreground/70 hover:text-primary transition-colors">
+          <button onClick={() => setSearchOpen(true)} className="text-foreground/70 hover:text-primary transition-colors" aria-label="Open search">
             <Search className="w-5 h-5" />
           </button>
           <Link
@@ -71,7 +76,12 @@ const Header = () => {
               </span>
             )}
           </button>
-          <button className="lg:hidden text-foreground/70" onClick={() => setMobileOpen(!mobileOpen)}>
+          <button
+            className="lg:hidden text-foreground/70"
+            onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+          >
             {mobileOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
           </button>
         </div>
@@ -95,7 +105,7 @@ const Header = () => {
                 <ul className="space-y-3">
                   {scentProfiles.map((s) => (
                     <li key={s}>
-                      <a href="#" onClick={(e) => e.preventDefault()} className="text-foreground/70 hover:text-primary transition-colors text-sm">{s}</a>
+                      <span className="text-foreground/70 text-sm">{s}</span>
                     </li>
                   ))}
                 </ul>
@@ -105,7 +115,7 @@ const Header = () => {
                 <ul className="space-y-3">
                   {moods.map((m) => (
                     <li key={m}>
-                      <a href="#" onClick={(e) => e.preventDefault()} className="text-foreground/70 hover:text-primary transition-colors text-sm">{m}</a>
+                      <span className="text-foreground/70 text-sm">{m}</span>
                     </li>
                   ))}
                 </ul>
@@ -115,7 +125,7 @@ const Header = () => {
                 <ul className="space-y-3">
                   {["For Him", "For Her", "Unisex", "Discovery Sets", "Gift Sets"].map((c) => (
                     <li key={c}>
-                      <a href="#" onClick={(e) => e.preventDefault()} className="text-foreground/70 hover:text-primary transition-colors text-sm">{c}</a>
+                      <span className="text-foreground/70 text-sm">{c}</span>
                     </li>
                   ))}
                 </ul>
