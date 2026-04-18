@@ -14,6 +14,14 @@ import { auth } from "./db/firebase.js";
 
 const app = new Hono();
 
+app.onError((err, c) => {
+  if (err instanceof HTTPException) {
+    return err.getResponse();
+  }
+  console.error("[Server Error]", err);
+  return c.json({ message: "Internal server error" }, 500);
+});
+
 app.use(
   cors({
     origin: ["http://localhost:5173", "http://localhost:4173", "http://localhost:3000"],

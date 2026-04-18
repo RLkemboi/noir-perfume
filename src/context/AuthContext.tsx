@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
 import {
   onAuthStateChanged,
@@ -94,10 +94,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     safeRemove(GUEST_KEY);
   };
 
-  const getIdToken = async () => {
+  const getIdToken = useCallback(async () => {
     if (!user) return null;
     return user.getIdToken(true);
-  };
+  }, [user]);
 
   const resetPassword = async (email: string) => {
     if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
