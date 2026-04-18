@@ -67,9 +67,10 @@ export async function getOrdersBySession(sessionId: string): Promise<Order[]> {
   }
   const snapshot = await ordersCollection
     .where("sessionId", "==", sessionId)
-    .orderBy("orderId", "asc")
     .get();
-  return snapshot.docs.map((d) => d.data() as Order);
+  return snapshot.docs
+    .map((d) => d.data() as Order)
+    .sort((a, b) => a.orderId - b.orderId);
 }
 
 export async function getOrdersByUser(userId: string): Promise<Order[]> {
@@ -80,9 +81,10 @@ export async function getOrdersByUser(userId: string): Promise<Order[]> {
   }
   const snapshot = await ordersCollection
     .where("userId", "==", userId)
-    .orderBy("orderId", "asc")
     .get();
-  return snapshot.docs.map((d) => d.data() as Order);
+  return snapshot.docs
+    .map((d) => d.data() as Order)
+    .sort((a, b) => a.orderId - b.orderId);
 }
 
 export async function getOrderById(orderId: number): Promise<Order | null> {

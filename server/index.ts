@@ -210,8 +210,12 @@ app.get("/api/orders/session/:sessionId", async (c) => {
   if (!isValidUUID(sessionId)) {
     throw new HTTPException(400, { message: "Invalid session ID" });
   }
-  const orders = await getOrdersBySession(sessionId);
-  return c.json({ orders, count: orders.length });
+  try {
+    const orders = await getOrdersBySession(sessionId);
+    return c.json({ orders, count: orders.length });
+  } catch {
+    throw new HTTPException(500, { message: "Unable to load orders. Please try again later." });
+  }
 });
 
 app.get("/api/orders/:orderId", async (c) => {
@@ -239,9 +243,12 @@ app.get("/api/orders/me", async (c) => {
   } catch {
     throw new HTTPException(401, { message: "Invalid token" });
   }
-  const userId = decoded.uid;
-  const orders = await getOrdersByUser(userId);
-  return c.json({ orders, count: orders.length });
+  try {
+    const orders = await getOrdersByUser(decoded.uid);
+    return c.json({ orders, count: orders.length });
+  } catch {
+    throw new HTTPException(500, { message: "Unable to load orders. Please try again later." });
+  }
 });
 
 // Serve built frontend assets

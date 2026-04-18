@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { LogOut, Package, User, ShoppingBag, Clock, Sparkles } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
+import { toast } from "sonner";
 import type { Order } from "../../server/types";
 
 export default function Dashboard() {
@@ -24,16 +25,22 @@ export default function Dashboard() {
           if (res.ok) {
             const data = await res.json();
             setOrders(data.orders || []);
+          } else {
+            const data = await res.json().catch(() => ({}));
+            toast.error(data.message || "Failed to load orders");
           }
         } else if (isGuest) {
           const res = await fetch(`/api/orders/session/${sessionId}`);
           if (res.ok) {
             const data = await res.json();
             setOrders(data.orders || []);
+          } else {
+            const data = await res.json().catch(() => ({}));
+            toast.error(data.message || "Failed to load orders");
           }
         }
       } catch {
-        // ignore
+        toast.error("Unable to load orders. Please try again later.");
       } finally {
         setLoading(false);
       }
