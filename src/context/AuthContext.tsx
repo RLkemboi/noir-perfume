@@ -6,6 +6,12 @@ import {
   createUserWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
+  sendEmailVerification,
+  updateProfile,
+  updateEmail,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
   GoogleAuthProvider,
   OAuthProvider,
   signInWithPopup,
@@ -16,6 +22,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   isGuest: boolean;
+  hasPasswordProvider: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -24,6 +31,11 @@ interface AuthContextType {
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
   continueAsGuest: () => void;
+  verifyEmail: () => Promise<void>;
+  updateUserProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>;
+  updateUserEmail: (email: string, currentPassword: string) => Promise<void>;
+  updateUserPassword: (password: string, currentPassword: string) => Promise<void>;
+  reauthenticate: (password: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -61,6 +73,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return safeGet(GUEST_KEY) === "true";
   });
 
+  const hasPasswordProvider = user?.providerData?.some((p) => p.providerId === "password") ?? false;
+
   useEffect(() => {
     if (!auth) {
       const id = setTimeout(() => setLoading(false), 0);
@@ -86,7 +100,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const register = async (email: string, password: string) => {
     if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
-    await createUserWithEmailAndPassword(auth, email, password);
+    const cred = await createUserWithEmailAndPassword(auth, email, password);
+    if (cred.user) {
+      try {
+        await sendEmailVerification(cred.user);
+      } catch {
+        // Non-fatal: account is created even if verification email fails
+      }
+    }
     setIsGuest(false);
     safeRemove(GUEST_KEY);
   };
@@ -132,9 +153,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     safeSet(GUEST_KEY, "true");
   };
 
+  const verifyEmail = async () => {
+    if (!auth || !auth.currentUser) throw new Error("No user is currently signed in.");
+    await sendEmailVerification(auth.currentUser);
+  };
+
+  const updateUserProfile = async (data: { displayName?: string; photoURL?: string }) => {
+    if (!auth || !auth.currentUser) throw new Error("No user is currently signed in.");
+    await updateProfile(auth.currentUser, data);
+    setUser({ ...auth.currentUser });
+  };
+
+  const reauthenticate = async (password: string) => {
+    if (!auth || !auth.currentUser) throw new Error("No user is currently signed in.");
+    const email = auth.currentUser.email;
+    if (!email) throw new Error("Account has no email address.");
+    const credential = EmailAuthProvider.credential(email, password);
+    await reauthenticateWithCredential(auth.currentUser, credential);
+  };
+
+  const updateUserEmail = async (email: string, currentPassword: string) => {
+    if (!auth || !auth.currentUser) throw new Error("No user is currently signed in.");
+    if (hasPasswordProvider) {
+      await reauthenticate(currentPassword);
+    }
+    await updateEmail(auth.currentUser, email);
+    setUser({ ...auth.currentUser });
+  };
+
+  const updateUserPassword = async (password: string, currentPassword: string) => {
+    if (!auth || !auth.currentUser) throw new Error("No user is currently signed in.");
+    if (!hasPasswordProvider) throw new Error("Password can only be changed for accounts created with email and password.");
+    await reauthenticate(currentPassword);
+    await updatePassword(auth.currentUser, password);
+  };
+
   return (
     <AuthContext.Provider
-      value={{ user, loading, isGuest, login, register, logout, getIdToken, resetPassword, signInWithGoogle, signInWithApple, continueAsGuest }}
+      value={{ user, loading, isGuest, hasPasswordProvider, login, register, logout, getIdToken, resetPassword, signInWithGoogle, signInWithApple, continueAsGuest, verifyEmail, updateUserProfile, updateUserEmail, updateUserPassword, reauthenticate }}
     >
       {children}
     </AuthContext.Provider>

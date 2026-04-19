@@ -16,6 +16,7 @@ export default function Login() {
   const navigate = useNavigate();
 
   const handleSocial = async (provider: "google" | "apple") => {
+    setSubmitting(true);
     try {
       if (provider === "google") {
         await signInWithGoogle();
@@ -27,6 +28,8 @@ export default function Login() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Authentication failed";
       toast.error(msg.replace("Firebase: ", "").replace(/\(.*\)/, "").trim());
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -176,14 +179,12 @@ export default function Login() {
                 setResetSubmitting(true);
                 try {
                   await resetPassword(email);
-                  toast.success("Password reset link sent. Check your inbox.");
-                  setShowReset(false);
-                } catch (err) {
-                  const msg = err instanceof Error ? err.message : "Failed to send reset link";
-                  toast.error(msg.replace("Firebase: ", "").replace(/\(.*\)/, "").trim());
-                } finally {
-                  setResetSubmitting(false);
+                } catch {
+                  // Ignore errors to prevent email enumeration
                 }
+                toast.success("If this account exists, a reset link has been sent.");
+                setShowReset(false);
+                setResetSubmitting(false);
               }}
               className="space-y-4"
             >

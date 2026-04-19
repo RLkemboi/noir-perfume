@@ -22,6 +22,11 @@ app.onError((err, c) => {
   return c.json({ message: "Internal server error" }, 500);
 });
 
+app.use("*", async (c, next) => {
+  c.header("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+  await next();
+});
+
 app.use(
   cors({
     origin: ["http://localhost:5173", "http://localhost:4173", "http://localhost:3000"],
@@ -156,7 +161,7 @@ app.post("/api/checkout", async (c) => {
   }
   const { sessionId, items } = body;
 
-  if (!sessionId || !Array.isArray(items) || items.length === 0) {
+  if (!sessionId || !isValidUUID(sessionId) || !Array.isArray(items) || items.length === 0) {
     throw new HTTPException(400, { message: "Invalid checkout payload" });
   }
 
@@ -186,7 +191,10 @@ app.post("/api/checkout", async (c) => {
   let userEmail: string | undefined;
   const authHeader = c.req.header("Authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-  if (token && auth) {
+  if (token) {
+    if (!auth) {
+      throw new HTTPException(503, { message: "Auth service unavailable. Please try again later." });
+    }
     try {
       const decoded = await auth.verifyIdToken(token);
       userId = decoded.uid;
@@ -217,23 +225,10 @@ app.get("/api/orders/session/:sessionId", async (c) => {
   }
 });
 
-app.get("/api/orders/:orderId", async (c) => {
-  const orderId = Number(c.req.param("orderId"));
-  if (!Number.isFinite(orderId)) {
-    throw new HTTPException(400, { message: "Invalid order ID" });
-  }
-  const order = await getOrderById(orderId);
-  if (!order) throw new HTTPException(404, { message: "Order not found" });
-  return c.json({ order });
-});
-
 app.get("/api/orders/me", async (c) => {
   const authHeader = c.req.header("Authorization");
-  console.log("[orders/me] Authorization header:", authHeader ? `${authHeader.slice(0, 20)}...` : "missing");
-  console.log("[orders/me] Server auth initialized:", !!auth);
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    console.log("[orders/me] Rejecting: missing or malformed Authorization header");
     throw new HTTPException(401, { message: "Unauthorized" });
   }
 
@@ -241,24 +236,57 @@ app.get("/api/orders/me", async (c) => {
   let decoded;
   try {
     if (!auth) {
-      console.log("[orders/me] Rejecting: Firebase Admin auth not initialized");
       throw new HTTPException(503, { message: "Auth service unavailable" });
     }
     decoded = await auth.verifyIdToken(idToken);
-    console.log("[orders/me] Token verified for uid:", decoded.uid);
-  } catch (err) {
-    console.log("[orders/me] Token verification failed:", err instanceof Error ? err.message : err);
+  } catch {
     throw new HTTPException(401, { message: "Invalid token" });
   }
 
   try {
     const orders = await getOrdersByUser(decoded.uid);
-    console.log("[orders/me] Returning", orders.length, "orders");
     return c.json({ orders, count: orders.length });
-  } catch (err) {
-    console.log("[orders/me] Order fetch failed:", err instanceof Error ? err.message : err);
+  } catch {
     throw new HTTPException(500, { message: "Unable to load orders. Please try again later." });
   }
+});
+
+app.get("/api/orders/:orderId", async (c) => {
+  const orderId = Number(c.req.param("orderId"));
+  if (!Number.isFinite(orderId)) {
+    throw new HTTPException(400, { message: "Invalid order ID" });
+  }
+  const order = await getOrderById(orderId);
+  if (!order) throw new HTTPException(404, { message: "Order not found" });
+
+  // Authorization: require Bearer token matching order's userId, or sessionId query matching order's sessionId
+  const authHeader = c.req.header("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const sessionId = c.req.query("sessionId") || "";
+
+  if (order.userId) {
+    if (!auth) {
+      throw new HTTPException(503, { message: "Auth service unavailable" });
+    }
+    if (!token) {
+      throw new HTTPException(401, { message: "Unauthorized" });
+    }
+    let decoded;
+    try {
+      decoded = await auth.verifyIdToken(token);
+    } catch {
+      throw new HTTPException(401, { message: "Invalid token" });
+    }
+    if (decoded.uid !== order.userId) {
+      throw new HTTPException(403, { message: "Forbidden" });
+    }
+  } else if (order.sessionId) {
+    if (!isValidUUID(sessionId) || sessionId !== order.sessionId) {
+      throw new HTTPException(403, { message: "Forbidden" });
+    }
+  }
+
+  return c.json({ order });
 });
 
 // Serve built frontend assets

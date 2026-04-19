@@ -90,7 +90,7 @@ npm run lint
 
 ## What's Next
 - [x] Swap in-memory storage for a real database (Firebase Firestore)
-- [ ] Add user authentication (JWT / Clerk / Auth0)
+- [x] Add user authentication (Firebase Auth — email/password, Google, Apple, guest mode, email verification, password reset, profile management)
 - [ ] Integrate real payments (Stripe / PayPal)
 - [ ] Admin dashboard for order management
 - [ ] Email confirmations on checkout

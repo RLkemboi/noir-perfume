@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LogOut, Package, User, ShoppingBag, Clock, Sparkles } from "lucide-react";
+import { LogOut, Package, User, ShoppingBag, Clock, Sparkles, Settings } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
@@ -80,7 +80,7 @@ export default function Dashboard() {
     );
   }
 
-  const displayName = user?.email || "Guest";
+  const displayName = user?.displayName || user?.email || "Guest";
   const isMember = !!user;
 
   return (
@@ -101,12 +101,22 @@ export default function Dashboard() {
                 </p>
               )}
             </div>
-            <button
-              onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 border border-border text-muted-foreground text-xs tracking-widest uppercase font-bold hover:text-foreground hover:border-primary/40 transition-colors"
-            >
-              <LogOut className="w-4 h-4" /> {user ? "Sign Out" : "End Session"}
-            </button>
+            <div className="flex items-center gap-2">
+              {user && (
+                <Link
+                  to="/profile"
+                  className="flex items-center gap-2 px-4 py-2 border border-border text-muted-foreground text-xs tracking-widest uppercase font-bold hover:text-foreground hover:border-primary/40 transition-colors"
+                >
+                  <Settings className="w-4 h-4" /> Settings
+                </Link>
+              )}
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 border border-border text-muted-foreground text-xs tracking-widest uppercase font-bold hover:text-foreground hover:border-primary/40 transition-colors"
+              >
+                <LogOut className="w-4 h-4" /> {user ? "Sign Out" : "End Session"}
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
