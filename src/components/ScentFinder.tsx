@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Flame, Wind, Sparkles, Crown, Moon, Briefcase, Heart } from "lucide-react";
+import { Flame, Wind, Sparkles, Crown, Moon, Briefcase, Heart, ArrowUpRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import { products } from "@/data";
 
 interface QuizOption {
@@ -185,9 +186,9 @@ const ScentFinder = () => {
                       </p>
                     </div>
                     <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                      <a href={`#product-${matchedProduct.id}`} className="px-8 py-3 bg-primary text-primary-foreground font-sans text-sm tracking-[0.15em] uppercase font-semibold hover:bg-gold-light transition-colors">
-                        View Fragrance
-                      </a>
+                      <Link to={`/product/${matchedProduct.id}`} className="px-8 py-3 bg-primary text-primary-foreground font-sans text-sm tracking-[0.15em] uppercase font-semibold hover:bg-gold-light transition-colors inline-flex items-center gap-2">
+                        View Fragrance <ArrowUpRight className="w-4 h-4" />
+                      </Link>
                       <button onClick={reset} className="px-8 py-3 gold-border text-primary font-sans text-sm tracking-[0.15em] uppercase font-semibold hover:bg-primary/10 transition-colors">
                         Retake Quiz
                       </button>

@@ -118,7 +118,7 @@ const SearchOverlay = ({ open, onClose }: SearchOverlayProps) => {
                 results.map((product) => (
                   <Link
                     key={product.id}
-                    to={`/#product-${product.id}`}
+                    to={`/product/${product.id}`}
                     onClick={onClose}
                     className="flex items-center gap-4 p-3 rounded-lg hover:bg-secondary/50 transition-colors group"
                   >

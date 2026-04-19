@@ -42,6 +42,13 @@ app.get("/api/health", (c) => c.json({ status: "ok", timestamp: new Date().toISO
 // Products
 app.get("/api/products", (c) => c.json({ products, count: products.length }));
 
+app.get("/api/products/:id", (c) => {
+  const id = c.req.param("id");
+  const product = products.find((p) => p.id === id);
+  if (!product) throw new HTTPException(404, { message: "Product not found" });
+  return c.json({ product });
+});
+
 function parsePrice(price: string): number {
   return Number(price.replace(/[^0-9.]/g, "")) || 0;
 }
