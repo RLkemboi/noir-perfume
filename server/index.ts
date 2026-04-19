@@ -16,7 +16,7 @@ const app = new Hono();
 
 app.onError((err, c) => {
   if (err instanceof HTTPException) {
-    return err.getResponse();
+    return c.json({ message: err.message }, err.status);
   }
   console.error("[Server Error]", err);
   return c.json({ message: "Internal server error" }, 500);
@@ -238,23 +238,34 @@ app.get("/api/orders/:orderId", async (c) => {
 
 app.get("/api/orders/me", async (c) => {
   const authHeader = c.req.header("Authorization");
+  console.log("[orders/me] Authorization header:", authHeader ? `${authHeader.slice(0, 20)}...` : "missing");
+  console.log("[orders/me] Server auth initialized:", !!auth);
+
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    console.log("[orders/me] Rejecting: missing or malformed Authorization header");
     throw new HTTPException(401, { message: "Unauthorized" });
   }
+
   const idToken = authHeader.slice(7);
   let decoded;
   try {
     if (!auth) {
+      console.log("[orders/me] Rejecting: Firebase Admin auth not initialized");
       throw new HTTPException(503, { message: "Auth service unavailable" });
     }
     decoded = await auth.verifyIdToken(idToken);
-  } catch {
+    console.log("[orders/me] Token verified for uid:", decoded.uid);
+  } catch (err) {
+    console.log("[orders/me] Token verification failed:", err instanceof Error ? err.message : err);
     throw new HTTPException(401, { message: "Invalid token" });
   }
+
   try {
     const orders = await getOrdersByUser(decoded.uid);
+    console.log("[orders/me] Returning", orders.length, "orders");
     return c.json({ orders, count: orders.length });
-  } catch {
+  } catch (err) {
+    console.log("[orders/me] Order fetch failed:", err instanceof Error ? err.message : err);
     throw new HTTPException(500, { message: "Unable to load orders. Please try again later." });
   }
 });
