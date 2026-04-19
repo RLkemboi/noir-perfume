@@ -31,15 +31,6 @@ app.use(
   })
 );
 
-// Global error handler
-app.onError((err, c) => {
-  if (err instanceof HTTPException) {
-    return err.getResponse();
-  }
-  console.error("[Server Error]", err);
-  return c.json({ success: false, error: "Internal server error" }, 500);
-});
-
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
