@@ -36,8 +36,8 @@ const App = () => (
       <AuthProvider>
         <CartProvider>
           <Sonner />
-          <CartDrawer />
           <BrowserRouter>
+            <CartDrawer />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
