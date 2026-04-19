@@ -7,6 +7,16 @@ export type CartItem = {
   quantity: number;
 };
 
+export interface ShippingDetails {
+  fullName: string;
+  email: string;
+  address: string;
+  city: string;
+  country: string;
+  postalCode: string;
+  phone: string;
+}
+
 export interface Order {
   orderId: number;
   sessionId: string;
@@ -15,4 +25,5 @@ export interface Order {
   createdAt: string;
   userId?: string;
   userEmail?: string;
+  shipping?: ShippingDetails;
 }

@@ -7,7 +7,7 @@ import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { readFileSync } from "fs";
 import { products } from "./data/products.js";
-import type { CartItem } from "./types.js";
+import type { CartItem, ShippingDetails } from "./types.js";
 import { getCart, setCart, deleteCart } from "./db/carts.js";
 import { createOrder, getOrdersBySession, getOrderById, getOrdersByUser } from "./db/orders.js";
 import { auth } from "./db/firebase.js";
@@ -160,13 +160,13 @@ app.delete("/api/cart/:sessionId", async (c) => {
 
 // Checkout
 app.post("/api/checkout", async (c) => {
-  let body: { sessionId: string; items: CartItem[] };
+  let body: { sessionId: string; items: CartItem[]; shipping?: ShippingDetails };
   try {
     body = await c.req.json();
   } catch {
     throw new HTTPException(400, { message: "Invalid JSON body" });
   }
-  const { sessionId, items } = body;
+  const { sessionId, items, shipping } = body;
 
   if (!sessionId || !isValidUUID(sessionId) || !Array.isArray(items) || items.length === 0) {
     throw new HTTPException(400, { message: "Invalid checkout payload" });
@@ -211,7 +211,7 @@ app.post("/api/checkout", async (c) => {
     }
   }
 
-  const order = await createOrder(sessionId, validatedItems, Number(total.toFixed(2)), userId, userEmail);
+  const order = await createOrder(sessionId, validatedItems, Number(total.toFixed(2)), userId, userEmail, shipping);
   await deleteCart(sessionId);
 
   return c.json({ success: true, orderId: order.orderId, total: order.total });

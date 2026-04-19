@@ -1,42 +1,10 @@
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Plus, Minus, ShoppingBag, Trash2 } from "lucide-react";
+import { X, Plus, Minus, ShoppingBag, Trash2, ArrowRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
-import { useAuth } from "@/context/AuthContext";
-import { toast } from "sonner";
+import { Link } from "react-router-dom";
 
 export const CartDrawer = () => {
-  const { items, isOpen, setIsOpen, removeItem, updateQuantity, clearCart, subtotal, sessionId } = useCart();
-  const { user, getIdToken } = useAuth();
-
-  const handleCheckout = async () => {
-    if (items.length === 0 || !sessionId) return;
-    try {
-      const headers: Record<string, string> = { "Content-Type": "application/json" };
-      if (user) {
-        const token = await getIdToken();
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-      }
-      const res = await fetch("/api/checkout", {
-        method: "POST",
-        headers,
-        body: JSON.stringify({ sessionId, items }),
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || "Checkout failed");
-      }
-      toast.success(`Order #${data.orderId} confirmed`, {
-        description: `Total: $${data.total}`,
-        className: "glass-panel border-primary/20",
-      });
-      clearCart();
-      setIsOpen(false);
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Checkout failed", {
-        className: "glass-panel border-destructive/20",
-      });
-    }
-  };
+  const { items, isOpen, setIsOpen, removeItem, updateQuantity, clearCart, subtotal } = useCart();
 
   const lineTotal = (price: string, qty: number) => {
     const val = Number(price.replace(/[^0-9.]/g, "")) || 0;
@@ -157,12 +125,13 @@ export const CartDrawer = () => {
                   >
                     Clear
                   </button>
-                  <button
-                    onClick={handleCheckout}
-                    className="flex-1 px-4 py-3 bg-primary text-primary-foreground text-xs tracking-widest uppercase font-bold hover:bg-gold-light transition-colors luxury-shadow"
+                  <Link
+                    to="/checkout"
+                    onClick={() => setIsOpen(false)}
+                    className="flex-1 px-4 py-3 bg-primary text-primary-foreground text-xs tracking-widest uppercase font-bold hover:bg-gold-light transition-colors luxury-shadow flex items-center justify-center gap-2"
                   >
-                    Checkout
-                  </button>
+                    Checkout <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
                 </div>
               </div>
             )}

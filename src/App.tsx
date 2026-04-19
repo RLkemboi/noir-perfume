@@ -11,6 +11,7 @@ import Signup from "./pages/Signup.tsx";
 import Dashboard from "./pages/Dashboard.tsx";
 import Profile from "./pages/Profile.tsx";
 import ProductDetail from "./pages/ProductDetail.tsx";
+import Checkout from "./pages/Checkout.tsx";
 import NotFound from "./pages/NotFound.tsx";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const App = () => (
               <Route path="/dashboard" element={<AuthRoute><Dashboard /></AuthRoute>} />
               <Route path="/profile" element={<AuthRoute><Profile /></AuthRoute>} />
               <Route path="/product/:id" element={<ProductDetail />} />
+              <Route path="/checkout" element={<Checkout />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>

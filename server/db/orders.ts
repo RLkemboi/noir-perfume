@@ -1,5 +1,5 @@
 import { db } from "./firebase.js";
-import type { CartItem, Order } from "../types.js";
+import type { CartItem, Order, ShippingDetails } from "../types.js";
 
 const memoryOrders = new Map<number, Order>();
 let memoryOrderId = 0;
@@ -12,7 +12,8 @@ export async function createOrder(
   items: CartItem[],
   total: number,
   userId?: string,
-  userEmail?: string
+  userEmail?: string,
+  shipping?: ShippingDetails
 ): Promise<Order> {
   if (!ordersCollection || !metadataDoc) {
     memoryOrderId += 1;
@@ -45,6 +46,7 @@ export async function createOrder(
     createdAt: new Date().toISOString(),
     userId,
     userEmail,
+    shipping,
   };
 
   await ordersCollection.doc(String(orderId)).set(order);
