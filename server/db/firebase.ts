@@ -24,6 +24,7 @@ if (looksReal) {
       credential: cert({ projectId, privateKey, clientEmail } as ServiceAccount),
     });
     db = getFirestore(app);
+    db.settings({ ignoreUndefinedProperties: true });
     auth = getAuth(app);
     console.log("[Firebase] Connected to Firestore.")
   } catch (err) {

@@ -66,23 +66,29 @@ export default function Signup() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 relative overflow-hidden">
+      {/* Decorative background elements */}
+      <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(circle_at_50%_50%,rgba(212,175,55,0.05),transparent_50%)]" />
+      <div className="absolute -top-24 -right-24 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-fluid" />
+      <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-primary/5 rounded-full blur-3xl animate-fluid" style={{ animationDelay: "-5s" }} />
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md"
+        className="w-full max-w-md relative z-10"
       >
         <div className="text-center mb-8">
-          <Link to="/" className="font-serif text-3xl tracking-[0.2em] gold-text font-bold">
+          <Link to="/" className="font-serif text-4xl tracking-[0.2em] gold-text font-bold mb-2 block">
             NOIR
           </Link>
-          <p className="text-muted-foreground mt-2 text-sm tracking-widest uppercase">
-            Create your account
+          <div className="h-px w-12 bg-primary/40 mx-auto mb-4" />
+          <p className="text-muted-foreground text-[10px] tracking-[0.3em] uppercase font-bold">
+            Create Your Essence Profile
           </p>
         </div>
 
-        <div className="glass-panel p-8 space-y-6">
+        <div className="glass-panel p-8 space-y-6 luxury-shadow border-primary/10">
           <div className="space-y-3">
             <button
               type="button"

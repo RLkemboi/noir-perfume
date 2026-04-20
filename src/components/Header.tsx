@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import SearchOverlay from "./SearchOverlay";
+import { TierBadge } from "./ui/TierBadge";
 
 const scentProfiles = ["Oud & Leather", "Amber & Spice", "Fresh & Aquatic", "Floral & Powdery"];
 const moods = ["Boardroom", "Evening Affair", "Intimate", "Weekend Escape"];
@@ -60,6 +61,9 @@ const Header = () => {
             aria-label={user ? "My account" : isGuest ? "Guest session" : "Sign in"}
           >
             <User className="w-5 h-5" />
+            {useAuth().profile && (
+              <TierBadge tier={useAuth().profile!.tier} className="scale-75 origin-right hidden md:flex" showIcon={false} />
+            )}
             {isGuest && (
               <span className="text-[10px] tracking-widest uppercase font-bold text-primary/70">Guest</span>
             )}

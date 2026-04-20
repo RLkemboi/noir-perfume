@@ -94,3 +94,4 @@ npm run lint
 - [ ] Integrate real payments (Stripe / PayPal)
 - [ ] Admin dashboard for order management
 - [ ] Email confirmations on checkout
+- [ ] Instagram luxury gallery integration (Future Update)

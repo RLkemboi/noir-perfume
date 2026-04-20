@@ -1,18 +1,37 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LogOut, Package, User, ShoppingBag, Clock, Sparkles, Settings } from "lucide-react";
+import { LogOut, Package, User, ShoppingBag, Clock, Sparkles, Settings, ShieldCheck, ChevronRight, MessageSquare, Send, Store, CheckCircle2, MapPin, Star } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
+import { TierBadge } from "@/components/ui/TierBadge";
 import type { Order } from "../../server/types";
 
 export default function Dashboard() {
-  const { user, logout, isGuest, getIdToken, loading: authLoading } = useAuth();
+  const { user, profile, logout, isGuest, getIdToken, loading: authLoading } = useAuth();
   const { sessionId } = useCart();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [submittingComment, setSubmittingComment] = useState<number | null>(null);
+  const [commentText, setCommentText] = useState<Record<number, string>>({});
+  const [reviewRatings, setReviewRatings] = useState<Record<number, number>>({});
+  const [expandedOrderId, setExpandedOrderId] = useState<number | null>(null);
+  const [confirmingReceiptId, setConfirmingReceiptId] = useState<number | null>(null);
+  const [requestingPromptId, setRequestingPromptId] = useState<number | null>(null);
+  const [payingOrderId, setPayingOrderId] = useState<number | null>(null);
+  const [paymentAmount, setPaymentAmount] = useState<Record<number, string>>({});
+
+  useEffect(() => {
+    // Role-based redirection for approved staff
+    if (profile && profile.isApproved) {
+      if (profile.role === "DeliveryAgent") navigate("/agent");
+      if (profile.role === "Admin") navigate("/admin");
+      if (profile.role === "Operator") navigate("/operator");
+      if (profile.role === "Marketing") navigate("/marketing");
+    }
+  }, [profile, navigate]);
 
   useEffect(() => {
     const loadOrders = async () => {
@@ -49,8 +68,146 @@ export default function Dashboard() {
   }, [user, isGuest, getIdToken, sessionId]);
 
   const handleLogout = async () => {
-    await logout();
-    navigate("/");
+    try {
+      await logout();
+      navigate("/login");
+      toast.success("Logged out successfully");
+    } catch {
+      toast.error("Logout failed");
+    }
+  };
+
+  const handleSubmitComment = async (orderId: number) => {
+    const text = commentText[orderId];
+    if (!text?.trim()) return;
+    const reviewRating = reviewRatings[orderId];
+    if (!reviewRating) {
+      toast.error("Please add a star rating before submitting your review.");
+      return;
+    }
+
+    setSubmittingComment(orderId);
+    try {
+      const { headers, suffix } = await buildOrderAccess();
+      headers["Content-Type"] = "application/json";
+      const res = await fetch(`/api/orders/${orderId}/comment${suffix}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ comment: text, reviewRating }),
+      });
+      if (res.ok) {
+        toast.success("Thank you for your feedback!");
+        setOrders(prev => prev.map(o => o.orderId === orderId ? { ...o, comment: text, reviewRating } : o));
+      } else {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || "Failed to submit review");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to submit comment");
+    } finally {
+      setSubmittingComment(null);
+    }
+  };
+
+  const handleConfirmReceipt = async (orderId: number) => {
+    setConfirmingReceiptId(orderId);
+    try {
+      const headers: Record<string, string> = {};
+      let url = `/api/orders/${orderId}/customer-confirm`;
+
+      if (user) {
+        const token = await getIdToken();
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
+        }
+      } else if (isGuest) {
+        url += `?sessionId=${encodeURIComponent(sessionId)}`;
+      }
+
+      const res = await fetch(url, { method: "POST", headers });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || "Failed to confirm receipt");
+      }
+
+      setOrders((prev) => prev.map((order) => (order.orderId === orderId ? data.order : order)));
+      toast.success("Your delivery confirmation has been recorded.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to confirm receipt";
+      toast.error(message);
+    } finally {
+      setConfirmingReceiptId(null);
+    }
+  };
+
+  const getConfirmationTone = (order: Order) => {
+    if (order.customerDeliveryConfirmed && order.agentDeliveryConfirmed) {
+      return "bg-emerald-500/10 text-emerald-500";
+    }
+    if (order.customerDeliveryConfirmed || order.agentDeliveryConfirmed) {
+      return "bg-red-500/10 text-red-500";
+    }
+    return "bg-yellow-500/10 text-yellow-500";
+  };
+
+  const buildOrderAccess = async () => {
+    const headers: Record<string, string> = {};
+    let suffix = "";
+    if (user) {
+      const token = await getIdToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+    } else if (isGuest) {
+      suffix = `?sessionId=${encodeURIComponent(sessionId)}`;
+    }
+    return { headers, suffix };
+  };
+
+  const handleRequestPaymentPrompt = async (order: Order) => {
+    setRequestingPromptId(order.orderId);
+    try {
+      const { headers, suffix } = await buildOrderAccess();
+      const res = await fetch(`/api/orders/${order.orderId}/request-payment-prompt${suffix}`, {
+        method: "POST",
+        headers,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to request payment prompt");
+      setOrders((prev) => prev.map((entry) => (entry.orderId === order.orderId ? data.order : entry)));
+      toast.success("Payment prompt sent.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to request payment prompt");
+    } finally {
+      setRequestingPromptId(null);
+    }
+  };
+
+  const handlePayNow = async (order: Order, payFull = false) => {
+    const rawAmount = payFull ? String(order.amountDue) : paymentAmount[order.orderId];
+    const amount = Number(rawAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid payment amount.");
+      return;
+    }
+
+    setPayingOrderId(order.orderId);
+    try {
+      const { headers, suffix } = await buildOrderAccess();
+      headers["Content-Type"] = "application/json";
+      const res = await fetch(`/api/orders/${order.orderId}/pay${suffix}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ amount }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Payment failed");
+      setOrders((prev) => prev.map((entry) => (entry.orderId === order.orderId ? data.order : entry)));
+      setPaymentAmount((prev) => ({ ...prev, [order.orderId]: "" }));
+      toast.success(amount >= order.amountDue ? "Order paid in full." : "Partial payment recorded.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Payment failed");
+    } finally {
+      setPayingOrderId(null);
+    }
   };
 
   if (authLoading) {
@@ -81,7 +238,6 @@ export default function Dashboard() {
   }
 
   const displayName = user?.displayName || user?.email || "Guest";
-  const isMember = !!user;
 
   return (
     <div className="min-h-screen bg-background pt-24 pb-16 px-4">
@@ -102,6 +258,20 @@ export default function Dashboard() {
               )}
             </div>
             <div className="flex items-center gap-2">
+              <Link
+                to="/"
+                className="flex items-center gap-2 px-4 py-2 border border-border text-muted-foreground text-xs tracking-widest uppercase font-bold hover:text-foreground hover:border-primary/40 transition-colors"
+              >
+                <Store className="w-4 h-4" /> Return to Shopping
+              </Link>
+              {user && profile?.role === "Admin" && (
+                <Link
+                  to="/admin"
+                  className="flex items-center gap-2 px-4 py-2 border border-primary/40 bg-primary/5 text-primary text-xs tracking-widest uppercase font-bold hover:bg-primary/10 transition-colors"
+                >
+                  <ShieldCheck className="w-4 h-4" /> Admin Panel
+                </Link>
+              )}
               {user && (
                 <Link
                   to="/profile"
@@ -126,19 +296,28 @@ export default function Dashboard() {
               <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">Orders</p>
             </div>
             <div className="glass-panel p-6 text-center">
-              <Clock className="w-6 h-6 text-primary mx-auto mb-2" />
-              <p className="text-2xl font-serif font-bold">
-                {orders.filter((o) => o.createdAt && new Date(o.createdAt).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000).length}
-              </p>
-              <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">This Week</p>
-            </div>
-            <div className="glass-panel p-6 text-center">
-              {isMember ? (
+              {profile ? (
                 <>
                   <Sparkles className="w-6 h-6 text-primary mx-auto mb-2" />
-                  <p className="text-2xl font-serif font-bold">Member</p>
-                  <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">Status</p>
+                  <p className="text-2xl font-serif font-bold">{profile.points || 0}</p>
+                  <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">Noir Points</p>
                 </>
+              ) : (
+                <>
+                  <Clock className="w-6 h-6 text-primary mx-auto mb-2" />
+                  <p className="text-2xl font-serif font-bold">
+                    {orders.filter((o) => o.createdAt && new Date(o.createdAt).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000).length}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">This Week</p>
+                </>
+              )}
+            </div>
+            <div className="glass-panel p-6 text-center">
+              {profile ? (
+                <div className="flex flex-col items-center justify-center h-full">
+                  <TierBadge tier={profile.tier} className="mb-2" />
+                  <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">Current Tier</p>
+                </div>
               ) : (
                 <>
                   <User className="w-6 h-6 text-primary mx-auto mb-2" />
@@ -167,26 +346,268 @@ export default function Dashboard() {
                 </Link>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {orders.map((order) => (
                   <div
                     key={order.orderId}
-                    className="flex items-center justify-between p-4 border border-border hover:border-primary/30 transition-colors"
+                    className="group glass-panel p-5 border-border hover:border-primary/40 transition-all duration-300"
                   >
-                    <div>
-                      <p className="text-xs text-primary/60 tracking-widest uppercase font-bold">
-                        Order #{order.orderId}
-                      </p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {order.items.length} item{order.items.length !== 1 ? "s" : ""}
-                      </p>
+                    <div className="flex flex-col sm:flex-row justify-between gap-4">
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3">
+                          <p className="text-xs text-primary font-bold tracking-[0.2em] uppercase">
+                            Order #{order.orderId}
+                          </p>
+                          <span className={`text-[9px] px-2 py-0.5 rounded uppercase font-bold tracking-widest ${
+                            order.status === "Delivered" ? "bg-emerald-500/10 text-emerald-500" :
+                            order.status === "Cancelled" ? "bg-destructive/10 text-destructive" :
+                            "bg-primary/10 text-primary"
+                          }`}>
+                            {order.status || "Processing"}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          {order.items.slice(0, 3).map((item, idx) => (
+                            <img 
+                              key={idx} 
+                              src={item.image} 
+                              alt={item.name} 
+                              className="w-10 h-10 object-cover rounded border border-border"
+                            />
+                          ))}
+                          {order.items.length > 3 && (
+                            <div className="w-10 h-10 flex items-center justify-center bg-secondary/50 rounded border border-border text-[10px] font-bold">
+                              +{order.items.length - 3}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right flex flex-col justify-between items-end">
+                        <div>
+                          <p className="font-serif gold-text font-bold text-lg">${order.total.toFixed(2)}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {order.createdAt ? new Date(order.createdAt).toLocaleDateString(undefined, {
+                              year: 'numeric', month: 'short', day: 'numeric'
+                            }) : ""}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setExpandedOrderId((current) => (current === order.orderId ? null : order.orderId))}
+                          className="text-[10px] tracking-widest uppercase font-bold flex items-center gap-1 text-primary hover:gap-2 transition-all"
+                        >
+                          {expandedOrderId === order.orderId ? "Hide Details" : "Track Details"} <ChevronRight className={`w-3 h-3 transition-transform ${expandedOrderId === order.orderId ? "rotate-90" : ""}`} />
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="font-serif gold-text font-bold">${order.total.toFixed(2)}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ""}
-                      </p>
-                    </div>
+
+                    {expandedOrderId === order.orderId && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        className="mt-6 pt-4 border-t border-border/40 space-y-4"
+                      >
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Delivery Address</p>
+                            <p className="text-sm flex items-start gap-2">
+                              <MapPin className="w-4 h-4 text-primary mt-0.5" />
+                              <span>
+                                {order.shipping?.address || "No address provided"}
+                                {order.shipping?.city ? `, ${order.shipping.city}` : ""}
+                                {order.shipping?.country ? `, ${order.shipping.country}` : ""}
+                              </span>
+                            </p>
+                            {order.shipping?.label && (
+                              <p className="text-xs text-muted-foreground">Saved label: {order.shipping.label}</p>
+                            )}
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Payment</p>
+                            <p className="text-sm">{order.paymentMethod === "PayOnDelivery" ? "Pay on Delivery" : "Card"}</p>
+                            {order.paymentMethod === "PayOnDelivery" && (
+                              <p className="text-xs text-muted-foreground">
+                                Paid ${order.amountPaid.toFixed(2)} of ${order.total.toFixed(2)}. Remaining: ${order.amountDue.toFixed(2)}.
+                              </p>
+                            )}
+                            <p className={`inline-flex px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest ${getConfirmationTone(order)}`}>
+                              {order.customerDeliveryConfirmed && order.agentDeliveryConfirmed
+                                ? "Both Confirmed"
+                                : order.customerDeliveryConfirmed || order.agentDeliveryConfirmed
+                                  ? "Partially Confirmed"
+                                  : "Awaiting Confirmation"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="grid gap-2 md:grid-cols-3">
+                          <div className={`rounded border px-3 py-3 text-xs ${order.agentDeliveryConfirmed ? "border-emerald-500/30 bg-emerald-500/5" : "border-yellow-500/30 bg-yellow-500/5"}`}>
+                            <p className="font-bold uppercase tracking-widest text-[10px]">Agent</p>
+                            <p className="mt-1">{order.agentDeliveryConfirmed ? "Delivery agent confirmed handoff." : "Waiting for delivery agent confirmation."}</p>
+                          </div>
+                          <div className={`rounded border px-3 py-3 text-xs ${order.customerDeliveryConfirmed ? "border-emerald-500/30 bg-emerald-500/5" : "border-yellow-500/30 bg-yellow-500/5"}`}>
+                            <p className="font-bold uppercase tracking-widest text-[10px]">Customer</p>
+                            <p className="mt-1">{order.customerDeliveryConfirmed ? "You confirmed receipt." : "Your confirmation is still pending."}</p>
+                          </div>
+                          <div className={`rounded border px-3 py-3 text-xs ${order.adminDeliveryConfirmed ? "border-emerald-500/30 bg-emerald-500/5" : "border-border bg-secondary/20"}`}>
+                            <p className="font-bold uppercase tracking-widest text-[10px]">Admin</p>
+                            <p className="mt-1">{order.adminDeliveryConfirmed ? "Admin finalized the completed delivery." : "Admin finalization pending."}</p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-2">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Status Timeline</p>
+                          <div className="space-y-2">
+                            {order.statusHistory.map((entry) => (
+                              <div key={`${entry.status}-${entry.date}`} className="flex items-center justify-between text-xs border border-border/50 rounded px-3 py-2">
+                                <span className="font-bold">{entry.status}</span>
+                                <span className="text-muted-foreground">{new Date(entry.date).toLocaleString()}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                        {order.paymentMethod === "PayOnDelivery" && (
+                          <div className="space-y-3 border border-border/50 rounded p-4">
+                            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                              <div>
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Payment Features</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Status: {order.paymentStatus}. Prompt requests: {order.paymentPromptCount || 0}
+                                  {order.payOnDeliveryLimit ? ` • Tier limit: $${order.payOnDeliveryLimit.toFixed(2)}` : ""}
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => handleRequestPaymentPrompt(order)}
+                                disabled={requestingPromptId === order.orderId}
+                                className="px-4 py-2 border border-border text-[10px] tracking-widest uppercase font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-50"
+                              >
+                                {requestingPromptId === order.orderId ? "Sending..." : "Request Payment Prompt"}
+                              </button>
+                            </div>
+
+                            {order.amountDue > 0 && (
+                              <div className="flex flex-col md:flex-row gap-3">
+                                <input
+                                  type="number"
+                                  min="1"
+                                  max={order.amountDue}
+                                  step="0.01"
+                                  value={paymentAmount[order.orderId] || ""}
+                                  onChange={(e) => setPaymentAmount((prev) => ({ ...prev, [order.orderId]: e.target.value }))}
+                                  placeholder={`Enter amount up to ${order.amountDue.toFixed(2)}`}
+                                  className="flex-1 bg-background border border-border px-3 py-2 text-xs focus:outline-none focus:border-primary transition-colors"
+                                />
+                                <button
+                                  onClick={() => handlePayNow(order)}
+                                  disabled={payingOrderId === order.orderId}
+                                  className="px-4 py-2 bg-secondary text-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-primary hover:text-primary-foreground disabled:opacity-50"
+                                >
+                                  {payingOrderId === order.orderId ? "Processing..." : "Pay Portion"}
+                                </button>
+                                <button
+                                  onClick={() => handlePayNow(order, true)}
+                                  disabled={payingOrderId === order.orderId}
+                                  className="px-4 py-2 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light disabled:opacity-50"
+                                >
+                                  Pay Full Balance
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {order.status === "Delivered" && !order.customerDeliveryConfirmed && (
+                          <button
+                            onClick={() => handleConfirmReceipt(order.orderId)}
+                            disabled={confirmingReceiptId === order.orderId}
+                            className="inline-flex items-center gap-2 px-4 py-3 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light disabled:opacity-50"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            {confirmingReceiptId === order.orderId ? "Confirming..." : "Confirm Receipt"}
+                          </button>
+                        )}
+                      </motion.div>
+                    )}
+
+                    {/* Feedback Prompt for Delivered Orders */}
+                    {order.status === "Delivered" && !order.comment && (
+                      <motion.div 
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        className="mt-6 pt-4 border-t border-primary/20 bg-primary/5 p-4 rounded-sm space-y-3"
+                      >
+                        <div className="flex items-center gap-2 text-primary">
+                          <MessageSquare className="w-4 h-4" />
+                          <p className="text-[10px] tracking-widest uppercase font-bold">How was your experience?</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <div className="flex items-center gap-1 px-2">
+                            {[1, 2, 3, 4, 5].map((value) => (
+                              <button
+                                key={value}
+                                type="button"
+                                onClick={() => setReviewRatings((prev) => ({ ...prev, [order.orderId]: value }))}
+                                className="text-primary transition-transform hover:scale-110"
+                                aria-label={`Rate ${value} star${value === 1 ? "" : "s"}`}
+                              >
+                                <Star className={`w-4 h-4 ${value <= (reviewRatings[order.orderId] || 0) ? "fill-primary" : ""}`} />
+                              </button>
+                            ))}
+                          </div>
+                          <input
+                            type="text"
+                            value={commentText[order.orderId] || ""}
+                            onChange={(e) => setCommentText(prev => ({ ...prev, [order.orderId]: e.target.value }))}
+                            placeholder="Leave a comment about your order..."
+                            className="flex-1 bg-background border border-border px-3 py-2 text-xs focus:outline-none focus:border-primary transition-colors"
+                          />
+                          <button
+                            onClick={() => handleSubmitComment(order.orderId)}
+                            disabled={submittingComment === order.orderId}
+                            className="px-4 py-2 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light disabled:opacity-50 flex items-center justify-center gap-2"
+                          >
+                            <Send className="w-3 h-3" />
+                            {submittingComment === order.orderId ? "..." : "Send"}
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {order.comment && (
+                      <div className="mt-4 pt-4 border-t border-border/40">
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold mb-1">Your Feedback</p>
+                        {order.reviewRating && (
+                          <div className="flex items-center gap-1 mb-2 text-primary">
+                            {Array.from({ length: 5 }).map((_, index) => (
+                              <Star key={index} className={`w-3.5 h-3.5 ${index < order.reviewRating! ? "fill-primary" : ""}`} />
+                            ))}
+                          </div>
+                        )}
+                        <p className="text-xs italic font-serif">"{order.comment}"</p>
+                      </div>
+                    )}
+
+                    {/* Simple Progress Bar for each order in dashboard */}
+                    {order.status !== "Delivered" && order.status !== "Cancelled" && (
+                      <div className="mt-6 pt-4 border-t border-border/40">
+                        <div className="flex justify-between text-[8px] uppercase tracking-widest font-bold mb-2 text-muted-foreground">
+                          <span>Processing</span>
+                          <span>Shipped</span>
+                          <span>Out for Delivery</span>
+                        </div>
+                        <div className="h-1 bg-border rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ 
+                              width: order.status === "Pending" ? "10%" :
+                                     order.status === "Processing" ? "33%" :
+                                     order.status === "Shipped" ? "66%" : "90%"
+                            }}
+                            className="h-full bg-primary"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

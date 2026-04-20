@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { ArrowLeft, ShoppingBag, Trash2, Plus, Minus, ShieldCheck, MapPin, CreditCard, CheckCircle, Package } from "lucide-react";
+import { ArrowLeft, ShoppingBag, Trash2, Plus, Minus, ShieldCheck, MapPin, CreditCard, CheckCircle, Package, Navigation, Bookmark } from "lucide-react";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
+import { TierBadge } from "@/components/ui/TierBadge";
+import type { PaymentMethod } from "../../server/types";
 
 interface ShippingForm {
   fullName: string;
@@ -14,14 +16,57 @@ interface ShippingForm {
   country: string;
   postalCode: string;
   phone: string;
+  source?: "manual" | "saved" | "map";
+  label?: string;
+  latitude?: number;
+  longitude?: number;
+}
+
+interface SavedAddress extends ShippingForm {
+  id: string;
+  nickname: string;
 }
 
 const SHIPPING_COST = 15;
+const COD_LIMITS: Record<string, number> = {
+  Silver: 250,
+  Gold: 600,
+  Platinum: 1200,
+  Diamond: 2500,
+  "The Alchemist Circle": 5000,
+};
+
+function safeReadAddresses(key: string): SavedAddress[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function safeWriteAddresses(key: string, addresses: SavedAddress[]) {
+  try {
+    localStorage.setItem(key, JSON.stringify(addresses));
+  } catch {
+    // ignore storage failures
+  }
+}
 
 export default function Checkout() {
   const { items, removeItem, updateQuantity, clearCart, subtotal, sessionId } = useCart();
-  const { user, getIdToken } = useAuth();
+  const { user, isGuest, getIdToken, refreshProfile, profile, loading } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect to login if not authenticated and not a guest
+  useEffect(() => {
+    if (!loading && !user && !isGuest) {
+      toast.error("Please sign in or continue as guest to checkout");
+      navigate("/login", { state: { from: "/checkout" } });
+    }
+  }, [user, isGuest, loading, navigate]);
 
   const [shipping, setShipping] = useState<ShippingForm>({
     fullName: user?.displayName || "",
@@ -36,8 +81,17 @@ export default function Checkout() {
   const [submitting, setSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [orderId, setOrderId] = useState<number | null>(null);
+  const [orderStatus] = useState<string>("Pending");
+  const [addressMode, setAddressMode] = useState<"manual" | "saved" | "map">("manual");
+  const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+  const [saveAddressForFuture, setSaveAddressForFuture] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Card");
 
   const total = subtotal + (subtotal > 0 ? SHIPPING_COST : 0);
+  const savedAddressKey = user ? `noir-saved-addresses:${user.uid}` : "";
+  const canPayOnDelivery = !!profile && ["Silver", "Gold", "Platinum", "Diamond", "The Alchemist Circle"].includes(profile.tier);
+  const payOnDeliveryLimit = profile ? COD_LIMITS[profile.tier] ?? 0 : 0;
 
   const lineTotal = (price: string, qty: number) => {
     const val = Number(price.replace(/[^0-9.]/g, "")) || 0;
@@ -48,6 +102,73 @@ export default function Checkout() {
     setShipping((prev) => ({ ...prev, [field]: value }));
   };
 
+  useEffect(() => {
+    setShipping((prev) => ({
+      ...prev,
+      fullName: user?.displayName || prev.fullName,
+      email: user?.email || prev.email,
+    }));
+  }, [user]);
+
+  useEffect(() => {
+    if (!savedAddressKey) {
+      setSavedAddresses([]);
+      setAddressMode("manual");
+      return;
+    }
+
+    const nextSaved = safeReadAddresses(savedAddressKey);
+    setSavedAddresses(nextSaved);
+    if (nextSaved.length > 0) {
+      setSelectedAddressId(nextSaved[0].id);
+    }
+  }, [savedAddressKey]);
+
+  useEffect(() => {
+    if (addressMode !== "saved") return;
+    const selected = savedAddresses.find((entry) => entry.id === selectedAddressId);
+    if (!selected) return;
+    setShipping(selected);
+  }, [addressMode, savedAddresses, selectedAddressId]);
+
+  const handleUseCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      toast.error("Geolocation is not supported on this device.");
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        setShipping((prev) => ({
+          ...prev,
+          source: "map",
+          latitude,
+          longitude,
+          address: prev.address || "Map-selected location",
+        }));
+        toast.success("Current location captured.");
+      },
+      () => {
+        toast.error("Unable to fetch your current location.");
+      }
+    );
+  };
+
+  const persistSavedAddress = () => {
+    if (!user || !saveAddressForFuture || !savedAddressKey) return;
+    const nickname = shipping.label?.trim() || shipping.city || "Saved Address";
+    const entry: SavedAddress = {
+      ...shipping,
+      id: `${Date.now()}`,
+      nickname,
+      source: addressMode,
+    };
+    const nextAddresses = [entry, ...savedAddresses.filter((item) => item.address !== entry.address)].slice(0, 5);
+    setSavedAddresses(nextAddresses);
+    safeWriteAddresses(savedAddressKey, nextAddresses);
+  };
+
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
     if (items.length === 0 || !sessionId) {
@@ -55,12 +176,29 @@ export default function Checkout() {
       return;
     }
 
-    const required: (keyof ShippingForm)[] = ["fullName", "email", "address", "city", "country", "postalCode"];
+    const required: Array<keyof Pick<ShippingForm, "fullName" | "email" | "address" | "city" | "country" | "postalCode">> = [
+      "fullName",
+      "email",
+      "address",
+      "city",
+      "country",
+      "postalCode",
+    ];
     for (const field of required) {
       if (!shipping[field].trim()) {
         toast.error(`Please enter your ${field.replace(/([A-Z])/g, " $1").toLowerCase()}`);
         return;
       }
+    }
+
+    if (paymentMethod === "PayOnDelivery" && !canPayOnDelivery) {
+      toast.error("Pay on delivery unlocks at Silver tier.");
+      return;
+    }
+
+    if (addressMode === "map" && (shipping.latitude == null || shipping.longitude == null)) {
+      toast.error("Please capture or enter a map location.");
+      return;
     }
 
     setSubmitting(true);
@@ -74,7 +212,12 @@ export default function Checkout() {
       const res = await fetch("/api/checkout", {
         method: "POST",
         headers,
-        body: JSON.stringify({ sessionId, items, shipping }),
+        body: JSON.stringify({
+          sessionId,
+          items,
+          shipping: { ...shipping, source: addressMode },
+          paymentMethod,
+        }),
       });
 
       const data = await res.json();
@@ -83,8 +226,10 @@ export default function Checkout() {
       }
 
       setOrderId(data.orderId);
+      persistSavedAddress();
       clearCart();
       setCompleted(true);
+      await refreshProfile();
       toast.success(`Order #${data.orderId} confirmed`, {
         description: `Total: $${data.total}`,
         className: "glass-panel border-primary/20",
@@ -99,47 +244,100 @@ export default function Checkout() {
   };
 
   if (completed && orderId) {
+    const statuses = ["Pending", "Processing", "Shipped", "Out for Delivery", "Delivered"];
+    const currentIndex = statuses.indexOf(orderStatus);
+
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <div className="min-h-screen flex items-center justify-center bg-background px-4 pt-20">
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.5 }}
-          className="text-center max-w-md space-y-6"
+          className="text-center max-w-2xl w-full space-y-8"
         >
           <div className="w-20 h-20 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto">
             <CheckCircle className="w-10 h-10 text-emerald-500" />
           </div>
+          
           <div>
             <h1 className="font-serif text-3xl font-bold mb-2">Order Confirmed</h1>
             <p className="text-muted-foreground font-sans">
-              Thank you, {shipping.fullName}. Your order has been received.
+              Thank you, {shipping.fullName}. Your luxury fragrance journey has begun.
             </p>
           </div>
-          <div className="glass-panel p-6 space-y-3 text-left">
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground font-sans">Order Number</span>
-              <span className="font-sans font-bold">#{orderId}</span>
+
+          {/* Jumia-style Tracking Progress */}
+          <div className="glass-panel p-8 space-y-6">
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="text-xs tracking-[0.2em] uppercase font-bold text-primary">Live Tracking</h3>
+              <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded font-bold uppercase tracking-widest">
+                {orderStatus}
+              </span>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground font-sans">Total</span>
-              <span className="font-serif gold-text font-bold">${total.toFixed(2)}</span>
+            
+            <div className="relative flex justify-between">
+              {statuses.map((s, idx) => (
+                <div key={s} className="flex flex-col items-center relative z-10 w-1/5">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 transition-all duration-500 ${
+                    idx <= currentIndex ? "bg-primary border-primary text-primary-foreground" : "bg-background border-border text-muted-foreground"
+                  }`}>
+                    {idx < currentIndex ? <CheckCircle className="w-4 h-4" /> : <Package className="w-4 h-4" />}
+                  </div>
+                  <span className={`text-[9px] mt-2 font-bold uppercase tracking-tighter ${
+                    idx <= currentIndex ? "text-primary" : "text-muted-foreground"
+                  }`}>
+                    {s}
+                  </span>
+                </div>
+              ))}
+              {/* Progress Line */}
+              <div className="absolute top-4 left-[10%] right-[10%] h-0.5 bg-border -z-0">
+                <motion.div 
+                  initial={{ width: 0 }}
+                  animate={{ width: `${(currentIndex / (statuses.length - 1)) * 100}%` }}
+                  className="h-full bg-primary"
+                />
+              </div>
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground font-sans">Email</span>
-              <span className="font-sans">{shipping.email}</span>
+
+            <div className="pt-4 border-t border-border flex flex-col sm:flex-row justify-between gap-4 text-left">
+              <div className="space-y-1">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Estimated Delivery</p>
+                <p className="text-sm font-sans font-bold">Wednesday, 22 April 2026</p>
+              </div>
+              <div className="space-y-1 sm:text-right">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Order ID</p>
+                <p className="text-sm font-sans font-bold">#{orderId}</p>
+              </div>
             </div>
           </div>
+
+          {/* Tier Rewards Card */}
+          {profile && (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+              className="glass-panel p-6 border-primary/20 bg-primary/5 flex items-center justify-between text-left"
+            >
+              <div className="space-y-1">
+                <p className="text-xs font-bold tracking-widest uppercase text-primary">Status Updated</p>
+                <div className="flex items-center gap-2">
+                  <TierBadge tier={profile.tier} />
+                  <span className="text-xs text-muted-foreground">+ {Math.floor(total)} Noir Points earned</span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-muted-foreground uppercase font-bold">Total Points</p>
+                <p className="text-lg font-serif gold-text font-bold">{profile.points}</p>
+              </div>
+            </motion.div>
+          )}
+
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
-              to="/dashboard"
-              className="px-8 py-3 bg-primary text-primary-foreground text-xs tracking-widest uppercase font-bold hover:bg-gold-light transition-colors inline-flex items-center justify-center gap-2"
-            >
-              <Package className="w-4 h-4" /> View Orders
-            </Link>
-            <Link
               to="/"
-              className="px-8 py-3 border border-border text-muted-foreground text-xs tracking-widest uppercase font-bold hover:text-foreground hover:border-primary/40 transition-colors inline-flex items-center justify-center gap-2"
+              className="px-12 py-3 bg-primary text-primary-foreground text-xs tracking-widest uppercase font-bold hover:bg-gold-light transition-colors inline-flex items-center justify-center gap-2"
             >
               Continue Shopping
             </Link>
@@ -259,6 +457,50 @@ export default function Checkout() {
                     <MapPin className="w-5 h-5 text-primary" /> Shipping Details
                   </h2>
 
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <button
+                      type="button"
+                      onClick={() => setAddressMode("manual")}
+                      className={`px-4 py-3 text-xs tracking-widest uppercase font-bold border transition-colors ${addressMode === "manual" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
+                    >
+                      Manual Address
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAddressMode("saved")}
+                      disabled={savedAddresses.length === 0}
+                      className={`px-4 py-3 text-xs tracking-widest uppercase font-bold border transition-colors disabled:opacity-50 ${addressMode === "saved" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
+                    >
+                      Saved Address
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAddressMode("map")}
+                      className={`px-4 py-3 text-xs tracking-widest uppercase font-bold border transition-colors ${addressMode === "map" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
+                    >
+                      Map Location
+                    </button>
+                  </div>
+
+                  {addressMode === "saved" && (
+                    <div className="space-y-3 glass-panel p-4">
+                      <label className="text-xs tracking-widest uppercase text-muted-foreground font-bold">
+                        Choose Saved Address
+                      </label>
+                      <select
+                        value={selectedAddressId}
+                        onChange={(e) => setSelectedAddressId(e.target.value)}
+                        className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                      >
+                        {savedAddresses.map((entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.nickname} - {entry.address}, {entry.city}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-2 sm:col-span-2">
                       <label className="text-xs tracking-widest uppercase text-muted-foreground font-bold">
@@ -297,7 +539,7 @@ export default function Checkout() {
                         value={shipping.address}
                         onChange={(e) => handleChange("address", e.target.value)}
                         className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
-                        placeholder="123 Avenue des Champs-Élysées"
+                        placeholder={addressMode === "map" ? "Apartment, building, or map note" : "123 Avenue des Champs-Élysées"}
                         required
                       />
                     </div>
@@ -356,7 +598,90 @@ export default function Checkout() {
                         placeholder="+33 1 23 45 67 89"
                       />
                     </div>
+
+                    {user && addressMode !== "saved" && (
+                      <div className="space-y-2 sm:col-span-2">
+                        <label className="text-xs tracking-widest uppercase text-muted-foreground font-bold">
+                          Save Label
+                        </label>
+                        <input
+                          type="text"
+                          value={shipping.label || ""}
+                          onChange={(e) => handleChange("label", e.target.value)}
+                          className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                          placeholder="Home, Office, Gift Recipient"
+                        />
+                      </div>
+                    )}
                   </div>
+
+                  {addressMode === "map" && (
+                    <div className="glass-panel p-4 space-y-4">
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <button
+                          type="button"
+                          onClick={handleUseCurrentLocation}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-3 bg-secondary text-foreground text-xs tracking-widest uppercase font-bold hover:bg-primary hover:text-primary-foreground transition-colors"
+                        >
+                          <Navigation className="w-4 h-4" /> Use Current Location
+                        </button>
+                        <a
+                          href="https://www.google.com/maps"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center justify-center gap-2 px-4 py-3 border border-border text-muted-foreground text-xs tracking-widest uppercase font-bold hover:text-foreground transition-colors"
+                        >
+                          <MapPin className="w-4 h-4" /> Open Map
+                        </a>
+                      </div>
+
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="space-y-2">
+                          <label className="text-xs tracking-widest uppercase text-muted-foreground font-bold">Latitude</label>
+                          <input
+                            type="number"
+                            value={shipping.latitude ?? ""}
+                            onChange={(e) => setShipping((prev) => ({ ...prev, latitude: e.target.value === "" ? undefined : Number(e.target.value) }))}
+                            className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                            placeholder="-1.2921"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs tracking-widest uppercase text-muted-foreground font-bold">Longitude</label>
+                          <input
+                            type="number"
+                            value={shipping.longitude ?? ""}
+                            onChange={(e) => setShipping((prev) => ({ ...prev, longitude: e.target.value === "" ? undefined : Number(e.target.value) }))}
+                            className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                            placeholder="36.8219"
+                          />
+                        </div>
+                      </div>
+
+                      {shipping.latitude != null && shipping.longitude != null && (
+                        <iframe
+                          title="Map preview"
+                          className="w-full h-64 border border-border"
+                          loading="lazy"
+                          src={`https://www.openstreetmap.org/export/embed.html?bbox=${shipping.longitude - 0.01}%2C${shipping.latitude - 0.01}%2C${shipping.longitude + 0.01}%2C${shipping.latitude + 0.01}&layer=mapnik&marker=${shipping.latitude}%2C${shipping.longitude}`}
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  {user && addressMode !== "saved" && (
+                    <label className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={saveAddressForFuture}
+                        onChange={(e) => setSaveAddressForFuture(e.target.checked)}
+                        className="accent-primary"
+                      />
+                      <span className="inline-flex items-center gap-2">
+                        <Bookmark className="w-4 h-4 text-primary" /> Save this address for future checkouts
+                      </span>
+                    </label>
+                  )}
                 </form>
               </div>
 
@@ -380,6 +705,30 @@ export default function Checkout() {
                       <span className="font-sans font-bold tracking-wider uppercase">Total</span>
                       <span className="font-serif text-xl gold-text font-bold">${total.toFixed(2)}</span>
                     </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <p className="text-xs tracking-widest uppercase text-muted-foreground font-bold">Payment Method</p>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("Card")}
+                      className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors ${paymentMethod === "Card" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
+                    >
+                      Pay Now
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => canPayOnDelivery && setPaymentMethod("PayOnDelivery")}
+                      disabled={!canPayOnDelivery}
+                      className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors disabled:opacity-50 ${paymentMethod === "PayOnDelivery" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
+                    >
+                      Pay on Delivery
+                    </button>
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      {canPayOnDelivery
+                        ? `Unlocked for your ${profile?.tier} tier up to $${payOnDeliveryLimit.toFixed(2)} per order.`
+                        : "Pay on delivery becomes available from Silver tier upward."}
+                    </p>
                   </div>
 
                   <button
