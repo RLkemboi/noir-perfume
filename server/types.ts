@@ -22,15 +22,16 @@ export interface ShippingDetails {
 }
 
 export type OrderStatus = "Pending" | "Processing" | "Shipped" | "Out for Delivery" | "Delivered" | "Cancelled";
-export type PaymentMethod = "Card" | "PayOnDelivery";
+export type PaymentMethod = "Card" | "PayOnDelivery" | "Mpesa";
 export type PaymentStatus = "Unpaid" | "Partial" | "Paid";
+export type EmploymentStatus = "Active" | "PendingApproval" | "Suspended";
 
 export type UserRole = "Customer" | "Operator" | "Manager" | "DeliveryAgent" | "Admin" | "Marketing";
 
 export interface PaymentEntry {
   amount: number;
   date: string;
-  source: "checkout" | "customer_portal" | "manual_admin";
+  source: "checkout" | "customer_portal" | "manual_admin" | "mpesa_stk";
 }
 
 export interface Order {
@@ -52,6 +53,14 @@ export interface Order {
   paymentPromptRequestedAt?: string;
   paymentPromptCount?: number;
   paymentHistory?: PaymentEntry[];
+  paymentPhone?: string;
+  paymentReference?: string;
+  paymentProvider?: "Card" | "PayOnDelivery" | "Mpesa";
+  paymentRequestedAt?: string;
+  paymentLastError?: string;
+  mpesaMerchantRequestId?: string;
+  mpesaCheckoutRequestId?: string;
+  mpesaReceiptNumber?: string;
   customerDeliveryConfirmed?: boolean;
   customerDeliveryConfirmedAt?: string;
   agentDeliveryConfirmed?: boolean;
@@ -64,7 +73,7 @@ export interface Order {
   reviewRating?: number;
 }
 
-export type UserTier = "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond" | "The Alchemist Circle";
+export type UserTier = "Junior" | "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond" | "The Alchemist Circle";
 
 export interface UserProfile {
   userId: string;
@@ -74,5 +83,10 @@ export interface UserProfile {
   isApproved: boolean;
   points: number;
   totalSpent: number;
+  accountBalance?: number;
   joinedAt: string;
+  employmentStatus?: EmploymentStatus;
+  department?: string;
+  hrNotes?: string;
+  lastRoleUpdatedAt?: string;
 }

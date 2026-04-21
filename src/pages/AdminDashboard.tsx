@@ -87,7 +87,9 @@ export default function AdminDashboard() {
   
   // Staff State
   const [pendingStaff, setPendingStaff] = useState<UserProfile[]>([]);
+  const [staffDirectory, setStaffDirectory] = useState<UserProfile[]>([]);
   const [loadingStaff, setLoadingStaff] = useState(false);
+  const [savingStaffId, setSavingStaffId] = useState<string | null>(null);
   
   // Orders State
   const [orders, setOrders] = useState<Order[]>([]);
@@ -104,8 +106,9 @@ export default function AdminDashboard() {
     
     try {
       const token = await getIdToken();
-      const [staffRes, ordersRes, financialRes] = await Promise.all([
+      const [staffRes, staffDirectoryRes, ordersRes, financialRes] = await Promise.all([
         fetch("/api/admin/pending-staff", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/admin/staff", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/admin/orders", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/admin/financials", { headers: { Authorization: `Bearer ${token}` } })
       ]);
@@ -113,6 +116,10 @@ export default function AdminDashboard() {
       if (staffRes.ok) {
         const data = await staffRes.json();
         setPendingStaff(data.pending);
+      }
+      if (staffDirectoryRes.ok) {
+        const data = await staffDirectoryRes.json();
+        setStaffDirectory(data.staff);
       }
       if (ordersRes.ok) {
         const data = await ordersRes.json();
@@ -145,9 +152,45 @@ export default function AdminDashboard() {
       if (res.ok) {
         toast.success("Staff approved successfully");
         setPendingStaff(prev => prev.filter(s => s.userId !== userId));
+        setStaffDirectory((prev) => prev.map((staff) => (
+          staff.userId === userId
+            ? { ...staff, isApproved: true, employmentStatus: "Active" }
+            : staff
+        )));
       }
     } catch {
       toast.error("Failed to approve staff");
+    }
+  };
+
+  const handleUpdateStaff = async (
+    userId: string,
+    updates: Partial<Pick<UserProfile, "role" | "isApproved" | "employmentStatus" | "department" | "hrNotes">>
+  ) => {
+    setSavingStaffId(userId);
+    try {
+      const token = await getIdToken();
+      const res = await fetch(`/api/admin/staff/${userId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(updates),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to update employee");
+
+      setStaffDirectory((prev) => prev.map((staff) => (staff.userId === userId ? data.profile : staff)));
+      setPendingStaff((prev) =>
+        data.profile.isApproved ? prev.filter((staff) => staff.userId !== userId) : prev
+      );
+      toast.success("Employee record updated");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update employee");
+    } finally {
+      setSavingStaffId(null);
     }
   };
 
@@ -225,6 +268,8 @@ export default function AdminDashboard() {
   }
 
   const totalRevenue = financials?.bookedRevenue ?? 0;
+  const activeEmployees = staffDirectory.filter((staff) => staff.employmentStatus !== "Suspended" && staff.isApproved);
+  const suspendedEmployees = staffDirectory.filter((staff) => staff.employmentStatus === "Suspended");
   const weeklyTrend = financials?.weeklyTrend ?? [];
   const chartValues = weeklyTrend.map((item) => item.estimatedProfit);
   const minValue = Math.min(...chartValues, 0);
@@ -236,6 +281,7 @@ export default function AdminDashboard() {
     return { ...item, x, y };
   });
   const linePath = chartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const formatMoney = (value?: number) => `$${Number(value ?? 0).toFixed(2)}`;
 
   return (
     <div className="min-h-screen bg-background pt-24 pb-16 px-4">
@@ -411,12 +457,12 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="glass-panel p-6">
                   <DollarSign className="w-6 h-6 text-primary mb-4" />
-                  <p className="text-3xl font-serif font-bold gold-text">${financials?.operatingNetWorth.toFixed(2) ?? "0.00"}</p>
+                  <p className="text-3xl font-serif font-bold gold-text">{formatMoney(financials?.operatingNetWorth)}</p>
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Net Worth Proxy</p>
                 </div>
                 <div className="glass-panel p-6">
                   <Wallet className="w-6 h-6 text-emerald-500 mb-4" />
-                  <p className="text-3xl font-serif font-bold text-emerald-500">${financials?.realizedRevenue.toFixed(2) ?? "0.00"}</p>
+                  <p className="text-3xl font-serif font-bold text-emerald-500">{formatMoney(financials?.realizedRevenue)}</p>
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Realized Revenue</p>
                 </div>
                 <div className="glass-panel p-6">
@@ -426,7 +472,7 @@ export default function AdminDashboard() {
                 </div>
                 <div className="glass-panel p-6">
                   <Receipt className="w-6 h-6 text-red-500 mb-4" />
-                  <p className="text-3xl font-serif font-bold text-red-500">${financials?.cancelledRevenue.toFixed(2) ?? "0.00"}</p>
+                  <p className="text-3xl font-serif font-bold text-red-500">{formatMoney(financials?.cancelledRevenue)}</p>
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Revenue Lost</p>
                 </div>
               </div>
@@ -440,7 +486,7 @@ export default function AdminDashboard() {
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Current Net Worth Proxy</p>
-                      <p className="font-serif text-xl gold-text font-bold">${financials?.operatingNetWorth.toFixed(2) ?? "0.00"}</p>
+                      <p className="font-serif text-xl gold-text font-bold">{formatMoney(financials?.operatingNetWorth)}</p>
                     </div>
                   </div>
 
@@ -481,8 +527,8 @@ export default function AdminDashboard() {
                     {weeklyTrend.map((week) => (
                       <div key={week.label} className={`rounded border px-3 py-3 ${week.direction === "down" ? "border-red-500/20 bg-red-500/5" : week.direction === "up" ? "border-emerald-500/20 bg-emerald-500/5" : "border-yellow-500/20 bg-yellow-500/5"}`}>
                         <p className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">{week.label}</p>
-                        <p className="font-serif font-bold">${week.estimatedProfit.toFixed(2)}</p>
-                        <p className="text-[10px] text-muted-foreground">Net worth ${week.netWorth.toFixed(2)}</p>
+                        <p className="font-serif font-bold">{formatMoney(week.estimatedProfit)}</p>
+                        <p className="text-[10px] text-muted-foreground">Net worth {formatMoney(week.netWorth)}</p>
                       </div>
                     ))}
                   </div>
@@ -498,7 +544,7 @@ export default function AdminDashboard() {
                   ].map((item) => (
                     <div key={item.label} className="flex justify-between items-center border-b border-border/40 pb-3 last:border-0 last:pb-0">
                       <span className="text-xs font-bold">{item.label}</span>
-                      <span className="font-serif gold-text font-bold">${item.value.toFixed(2)}</span>
+                      <span className="font-serif gold-text font-bold">{formatMoney(item.value)}</span>
                     </div>
                   ))}
 
@@ -516,7 +562,7 @@ export default function AdminDashboard() {
                   <p className="mt-2 text-2xl font-serif font-bold text-yellow-500">{financials?.unpaidCodOrders ?? 0}</p>
                 </div>
                 <div className="glass-panel p-5">
-                  <p className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Partial Payments</p>
+                  <p className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Bronze Deposit Orders</p>
                   <p className="mt-2 text-2xl font-serif font-bold text-primary">{financials?.partialCodOrders ?? 0}</p>
                 </div>
                 <div className="glass-panel p-5">
@@ -651,11 +697,11 @@ export default function AdminDashboard() {
                             </td>
                             <td className="px-6 py-4">
                               <button
-                                disabled={updatingOrderId === order.orderId || order.adminDeliveryConfirmed || !order.agentDeliveryConfirmed || !order.customerDeliveryConfirmed}
+                                disabled={updatingOrderId === order.orderId || order.adminDeliveryConfirmed || !order.agentDeliveryConfirmed || !order.customerDeliveryConfirmed || order.amountDue > 0}
                                 onClick={() => handleFinalizeDelivery(order.orderId)}
                                 className="px-3 py-1.5 border border-border text-[10px] tracking-widest uppercase font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-50"
                               >
-                                {order.adminDeliveryConfirmed ? "Finalized" : "Confirm Both"}
+                                {order.adminDeliveryConfirmed ? "Finalized" : order.amountDue > 0 ? "Await Payment" : "Confirm Both"}
                               </button>
                             </td>
                           </tr>
@@ -680,59 +726,201 @@ export default function AdminDashboard() {
               {loadingStaff ? (
                 <div className="text-center py-20">
                   <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-                  <p className="text-muted-foreground text-xs tracking-widest uppercase">Loading applications...</p>
-                </div>
-              ) : pendingStaff.length === 0 ? (
-                <div className="glass-panel p-12 text-center space-y-3">
-                  <div className="w-12 h-12 bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto">
-                    <UserCheck className="w-6 h-6 text-emerald-500" />
-                  </div>
-                  <p className="text-muted-foreground font-serif italic">No pending staff applications.</p>
+                  <p className="text-muted-foreground text-xs tracking-widest uppercase">Loading employee records...</p>
                 </div>
               ) : (
-                <div className="grid gap-4">
-                  {pendingStaff.map(staff => (
-                    <motion.div 
-                      layout 
-                      key={staff.userId}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      className="glass-panel p-6 flex flex-col md:flex-row justify-between items-center gap-6 border-primary/10"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-secondary rounded-full flex items-center justify-center font-bold text-primary">
-                          {staff.email[0].toUpperCase()}
-                        </div>
-                        <div className="space-y-1">
-                          <div className="flex items-center gap-2">
-                            <p className="font-bold">{staff.email}</p>
-                            <span className="text-[8px] bg-primary/10 text-primary px-2 py-0.5 rounded font-bold uppercase tracking-widest">
-                              {staff.role}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                            <span className="flex items-center gap-1"><Mail className="w-3 h-3" /> {staff.email}</span>
-                            <span>•</span>
-                            <span>Joined {new Date(staff.joinedAt).toLocaleDateString()}</span>
-                          </div>
-                          <TierBadge tier={staff.tier} className="scale-75 origin-left" />
-                        </div>
-                      </div>
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="glass-panel p-6">
+                      <Users className="w-6 h-6 text-primary mb-4" />
+                      <p className="text-3xl font-serif font-bold gold-text">{staffDirectory.length}</p>
+                      <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Total Staff</p>
+                    </div>
+                    <div className="glass-panel p-6">
+                      <UserCheck className="w-6 h-6 text-emerald-500 mb-4" />
+                      <p className="text-3xl font-serif font-bold text-emerald-500">{activeEmployees.length}</p>
+                      <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Active Employees</p>
+                    </div>
+                    <div className="glass-panel p-6">
+                      <UserX className="w-6 h-6 text-red-500 mb-4" />
+                      <p className="text-3xl font-serif font-bold text-red-500">{suspendedEmployees.length}</p>
+                      <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Suspended</p>
+                    </div>
+                  </div>
 
-                      <div className="flex gap-2 w-full md:w-auto">
-                        <button 
-                          onClick={() => handleApproveStaff(staff.userId)}
-                          className="flex-1 md:flex-none px-6 py-3 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light transition-all flex items-center justify-center gap-2"
-                        >
-                          <UserCheck className="w-4 h-4" /> Approve
-                        </button>
-                        <button className="flex-1 md:flex-none px-6 py-3 border border-border text-muted-foreground text-[10px] tracking-widest uppercase font-bold hover:text-destructive hover:border-destructive/40 transition-all flex items-center justify-center gap-2">
-                          <UserX className="w-4 h-4" /> Reject
-                        </button>
+                  <div className="glass-panel p-6 space-y-4">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-bold tracking-widest uppercase text-primary">Pending Applications</h3>
+                        <p className="text-xs text-muted-foreground">Approve or hold incoming staff requests.</p>
                       </div>
-                    </motion.div>
-                  ))}
-                </div>
+                      <span className="text-xs font-bold">{pendingStaff.length}</span>
+                    </div>
+
+                    {pendingStaff.length === 0 ? (
+                      <div className="rounded border border-emerald-500/20 bg-emerald-500/5 p-4 text-sm text-muted-foreground">
+                        No pending staff applications.
+                      </div>
+                    ) : (
+                      <div className="grid gap-4">
+                        {pendingStaff.map((staff) => (
+                          <motion.div
+                            layout
+                            key={staff.userId}
+                            initial={{ opacity: 0, x: -20 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className="rounded border border-primary/10 bg-black/10 p-4 flex flex-col md:flex-row justify-between gap-4"
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2">
+                                <p className="font-bold">{staff.email}</p>
+                                <span className="text-[8px] bg-primary/10 text-primary px-2 py-0.5 rounded font-bold uppercase tracking-widest">
+                                  {staff.role}
+                                </span>
+                              </div>
+                              <p className="text-xs text-muted-foreground">Joined {new Date(staff.joinedAt).toLocaleDateString()}</p>
+                              <TierBadge tier={staff.tier} className="scale-75 origin-left" />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => handleApproveStaff(staff.userId)}
+                                className="px-4 py-2 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light transition-all"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleUpdateStaff(staff.userId, { isApproved: false, employmentStatus: "Suspended" })}
+                                className="px-4 py-2 border border-border text-muted-foreground text-[10px] tracking-widest uppercase font-bold hover:text-destructive hover:border-destructive/40 transition-all"
+                              >
+                                Hold
+                              </button>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="glass-panel overflow-hidden">
+                    <div className="px-6 py-4 border-b border-border bg-black/20 flex items-center justify-between gap-4">
+                      <div>
+                        <h3 className="text-sm font-bold tracking-widest uppercase text-primary">Employee Directory</h3>
+                        <p className="text-xs text-muted-foreground">HR controls for role assignment, approval, and suspension.</p>
+                      </div>
+                    </div>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="border-b border-border bg-black/10">
+                            <th className="px-6 py-4 text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Employee</th>
+                            <th className="px-6 py-4 text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Role</th>
+                            <th className="px-6 py-4 text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Department</th>
+                            <th className="px-6 py-4 text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Status</th>
+                            <th className="px-6 py-4 text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Approval</th>
+                            <th className="px-6 py-4 text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                          {staffDirectory.map((staff) => (
+                            <tr key={staff.userId} className="hover:bg-primary/5 transition-colors">
+                              <td className="px-6 py-4">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-bold">{staff.email}</p>
+                                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                    <Mail className="w-3 h-3" /> Joined {new Date(staff.joinedAt).toLocaleDateString()}
+                                  </p>
+                                </div>
+                              </td>
+                              <td className="px-6 py-4">
+                                <select
+                                  disabled={savingStaffId === staff.userId}
+                                  value={staff.role}
+                                  onChange={(e) => handleUpdateStaff(staff.userId, { role: e.target.value as UserProfile["role"] })}
+                                  className="bg-background border border-border px-3 py-2 text-[10px] tracking-widest uppercase font-bold"
+                                >
+                                  {(["Admin", "Manager", "Operator", "DeliveryAgent", "Marketing"] as UserProfile["role"][]).map((role) => (
+                                    <option key={role} value={role}>{role}</option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="px-6 py-4">
+                                <button
+                                  onClick={() => {
+                                    const nextDepartment = window.prompt("Department", staff.department || "General");
+                                    if (nextDepartment !== null) {
+                                      void handleUpdateStaff(staff.userId, { department: nextDepartment });
+                                    }
+                                  }}
+                                  className="text-xs text-muted-foreground hover:text-foreground"
+                                >
+                                  {staff.department || "Set Department"}
+                                </button>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`inline-flex px-3 py-1.5 rounded-full border text-[10px] tracking-widest uppercase font-bold ${
+                                  staff.employmentStatus === "Suspended"
+                                    ? "text-red-500 border-red-500/20 bg-red-500/5"
+                                    : staff.isApproved
+                                      ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/5"
+                                      : "text-yellow-500 border-yellow-500/20 bg-yellow-500/5"
+                                }`}>
+                                  {staff.employmentStatus || (staff.isApproved ? "Active" : "PendingApproval")}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <span className={`text-[10px] tracking-widest uppercase font-bold ${staff.isApproved ? "text-emerald-500" : "text-yellow-500"}`}>
+                                  {staff.isApproved ? "Approved" : "Pending"}
+                                </span>
+                              </td>
+                              <td className="px-6 py-4">
+                                <div className="flex flex-wrap gap-2">
+                                  {!staff.isApproved && (
+                                    <button
+                                      onClick={() => handleApproveStaff(staff.userId)}
+                                      disabled={savingStaffId === staff.userId}
+                                      className="px-3 py-1.5 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold disabled:opacity-50"
+                                    >
+                                      Approve
+                                    </button>
+                                  )}
+                                  {staff.employmentStatus === "Suspended" ? (
+                                    <button
+                                      onClick={() => handleUpdateStaff(staff.userId, { employmentStatus: "Active", isApproved: true })}
+                                      disabled={savingStaffId === staff.userId}
+                                      className="px-3 py-1.5 border border-emerald-500/30 text-emerald-500 text-[10px] tracking-widest uppercase font-bold disabled:opacity-50"
+                                    >
+                                      Restore
+                                    </button>
+                                  ) : (
+                                    <button
+                                      onClick={() => handleUpdateStaff(staff.userId, { employmentStatus: "Suspended", isApproved: false })}
+                                      disabled={savingStaffId === staff.userId}
+                                      className="px-3 py-1.5 border border-red-500/30 text-red-500 text-[10px] tracking-widest uppercase font-bold disabled:opacity-50"
+                                    >
+                                      Suspend
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => {
+                                      const nextNotes = window.prompt("HR notes", staff.hrNotes || "");
+                                      if (nextNotes !== null) {
+                                        void handleUpdateStaff(staff.userId, { hrNotes: nextNotes });
+                                      }
+                                    }}
+                                    disabled={savingStaffId === staff.userId}
+                                    className="px-3 py-1.5 border border-border text-muted-foreground text-[10px] tracking-widest uppercase font-bold disabled:opacity-50"
+                                  >
+                                    Notes
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
               )}
             </motion.div>
           )}

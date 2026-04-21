@@ -1,11 +1,35 @@
-import { db } from "./firebase.js";
-import type { CartItem, Order, ShippingDetails, OrderStatus, PaymentMethod, PaymentEntry } from "../types.js";
+import { db, canUseFirestore, disableFirestore } from "./firebase.js";
+import type { CartItem, Order, ShippingDetails, OrderStatus, PaymentMethod, PaymentEntry, PaymentStatus } from "../types.js";
 
 const memoryOrders = new Map<number, Order>();
 let memoryOrderId = 0;
 
 const ordersCollection = db?.collection("orders");
 const metadataDoc = db?.collection("metadata").doc("counters");
+
+async function withOrdersFallback<T>(action: () => Promise<T>, fallback: () => T | Promise<T>): Promise<T> {
+  if (!ordersCollection || !canUseFirestore()) {
+    return await fallback();
+  }
+
+  try {
+    return await action();
+  } catch (err) {
+    if (disableFirestore(err)) {
+      return await fallback();
+    }
+    throw err;
+  }
+}
+
+interface CreateOrderOptions {
+  initialAmountPaid?: number;
+  initialPaymentStatus?: PaymentStatus;
+  initialPaymentHistory?: PaymentEntry[];
+  paymentPromptCount?: number;
+  paymentPromptRequestedAt?: string;
+  paymentReference?: string;
+}
 
 function normalizeOrder(order: Order): Order {
   const paymentMethod = order.paymentMethod || "Card";
@@ -19,6 +43,9 @@ function normalizeOrder(order: Order): Order {
     ...order,
     shipping: order.shipping,
     paymentMethod,
+    paymentProvider:
+      order.paymentProvider ??
+      (paymentMethod === "Mpesa" ? "Mpesa" : paymentMethod === "PayOnDelivery" ? "PayOnDelivery" : "Card"),
     paymentStatus,
     amountPaid,
     amountDue,
@@ -35,7 +62,7 @@ function normalizeOrder(order: Order): Order {
   };
 }
 
-export async function createOrder(
+function createMemoryOrder(
   sessionId: string,
   items: CartItem[],
   total: number,
@@ -43,55 +70,25 @@ export async function createOrder(
   userEmail?: string,
   shipping?: ShippingDetails,
   paymentMethod: PaymentMethod = "Card",
-  payOnDeliveryLimit?: number
-): Promise<Order> {
+  payOnDeliveryLimit?: number,
+  paymentPhone?: string,
+  options: CreateOrderOptions = {}
+): Order {
   const initialStatus = "Pending";
   const now = new Date().toISOString();
   const isCard = paymentMethod === "Card";
-  const initialPaymentHistory: PaymentEntry[] = isCard
-    ? [{ amount: total, date: now, source: "checkout" }]
-    : [];
-  const initialPromptCount = isCard ? 0 : 1;
-  
-  if (!ordersCollection || !metadataDoc) {
-    memoryOrderId += 1;
-    const order: Order = {
-      orderId: memoryOrderId,
-      sessionId,
-      items,
-      total,
-      createdAt: now,
-      userId,
-      userEmail,
-      shipping,
-      status: initialStatus,
-      statusHistory: [{ status: initialStatus, date: now }],
-      paymentMethod,
-      paymentStatus: isCard ? "Paid" : "Unpaid",
-      amountPaid: isCard ? total : 0,
-      amountDue: isCard ? 0 : total,
-      payOnDeliveryLimit,
-      paymentPromptRequestedAt: isCard ? undefined : now,
-      paymentPromptCount: initialPromptCount,
-      paymentHistory: initialPaymentHistory,
-      customerDeliveryConfirmed: false,
-      agentDeliveryConfirmed: false,
-      adminDeliveryConfirmed: false,
-    };
-    memoryOrders.set(memoryOrderId, order);
-    return normalizeOrder(order);
-  }
+  const initialAmountPaid = Number((options.initialAmountPaid ?? (isCard ? total : 0)).toFixed(2));
+  const initialPaymentHistory: PaymentEntry[] = options.initialPaymentHistory ?? (
+    initialAmountPaid > 0 ? [{ amount: initialAmountPaid, date: now, source: "checkout" }] : []
+  );
+  const initialPromptCount = options.paymentPromptCount ?? (paymentMethod === "PayOnDelivery" ? 1 : 0);
+  const initialPaymentStatus = options.initialPaymentStatus ?? (
+    initialAmountPaid >= total ? "Paid" : initialAmountPaid > 0 ? "Partial" : "Unpaid"
+  );
 
-  const orderId = await db.runTransaction(async (transaction) => {
-    const doc = await transaction.get(metadataDoc);
-    const current = doc.exists ? (doc.data()?.lastOrderId as number) || 0 : 0;
-    const next = current + 1;
-    transaction.set(metadataDoc, { lastOrderId: next }, { merge: true });
-    return next;
-  });
-
+  memoryOrderId += 1;
   const order: Order = {
-    orderId,
+    orderId: memoryOrderId,
     sessionId,
     items,
     total,
@@ -102,11 +99,15 @@ export async function createOrder(
     status: initialStatus,
     statusHistory: [{ status: initialStatus, date: now }],
     paymentMethod,
-    paymentStatus: isCard ? "Paid" : "Unpaid",
-    amountPaid: isCard ? total : 0,
-    amountDue: isCard ? 0 : total,
+    paymentStatus: initialPaymentStatus,
+    amountPaid: initialAmountPaid,
+    amountDue: Math.max(0, Number((total - initialAmountPaid).toFixed(2))),
     payOnDeliveryLimit,
-    paymentPromptRequestedAt: isCard ? undefined : now,
+    paymentPhone,
+    paymentReference: options.paymentReference,
+    paymentProvider: paymentMethod === "Mpesa" ? "Mpesa" : paymentMethod === "PayOnDelivery" ? "PayOnDelivery" : "Card",
+    paymentRequestedAt: paymentMethod === "Mpesa" ? now : undefined,
+    paymentPromptRequestedAt: options.paymentPromptRequestedAt ?? (paymentMethod === "PayOnDelivery" ? now : undefined),
     paymentPromptCount: initialPromptCount,
     paymentHistory: initialPaymentHistory,
     customerDeliveryConfirmed: false,
@@ -114,187 +115,301 @@ export async function createOrder(
     adminDeliveryConfirmed: false,
   };
 
-  await ordersCollection.doc(String(orderId)).set(order);
+  memoryOrders.set(memoryOrderId, order);
   return normalizeOrder(order);
+}
+
+export async function createOrder(
+  sessionId: string,
+  items: CartItem[],
+  total: number,
+  userId?: string,
+  userEmail?: string,
+  shipping?: ShippingDetails,
+  paymentMethod: PaymentMethod = "Card",
+  payOnDeliveryLimit?: number,
+  paymentPhone?: string,
+  options: CreateOrderOptions = {}
+): Promise<Order> {
+  if (!ordersCollection || !metadataDoc || !canUseFirestore()) {
+    return createMemoryOrder(sessionId, items, total, userId, userEmail, shipping, paymentMethod, payOnDeliveryLimit, paymentPhone, options);
+  }
+
+  return withOrdersFallback(
+    async () => {
+      const initialStatus = "Pending";
+      const now = new Date().toISOString();
+      const isCard = paymentMethod === "Card";
+      const initialAmountPaid = Number((options.initialAmountPaid ?? (isCard ? total : 0)).toFixed(2));
+      const initialPaymentHistory: PaymentEntry[] = options.initialPaymentHistory ?? (
+        initialAmountPaid > 0 ? [{ amount: initialAmountPaid, date: now, source: "checkout" }] : []
+      );
+      const initialPromptCount = options.paymentPromptCount ?? (paymentMethod === "PayOnDelivery" ? 1 : 0);
+      const initialPaymentStatus = options.initialPaymentStatus ?? (
+        initialAmountPaid >= total ? "Paid" : initialAmountPaid > 0 ? "Partial" : "Unpaid"
+      );
+
+      const orderId = await db!.runTransaction(async (transaction) => {
+        const doc = await transaction.get(metadataDoc);
+        const current = doc.exists ? (doc.data()?.lastOrderId as number) || 0 : 0;
+        const next = current + 1;
+        transaction.set(metadataDoc, { lastOrderId: next }, { merge: true });
+        return next;
+      });
+
+      const order: Order = {
+        orderId,
+        sessionId,
+        items,
+        total,
+        createdAt: now,
+        userId,
+        userEmail,
+        shipping,
+        status: initialStatus,
+        statusHistory: [{ status: initialStatus, date: now }],
+        paymentMethod,
+        paymentStatus: initialPaymentStatus,
+        amountPaid: initialAmountPaid,
+        amountDue: Math.max(0, Number((total - initialAmountPaid).toFixed(2))),
+        payOnDeliveryLimit,
+        paymentPhone,
+        paymentReference: options.paymentReference,
+        paymentProvider: paymentMethod === "Mpesa" ? "Mpesa" : paymentMethod === "PayOnDelivery" ? "PayOnDelivery" : "Card",
+        paymentRequestedAt: paymentMethod === "Mpesa" ? now : undefined,
+        paymentPromptRequestedAt: options.paymentPromptRequestedAt ?? (paymentMethod === "PayOnDelivery" ? now : undefined),
+        paymentPromptCount: initialPromptCount,
+        paymentHistory: initialPaymentHistory,
+        customerDeliveryConfirmed: false,
+        agentDeliveryConfirmed: false,
+        adminDeliveryConfirmed: false,
+      };
+
+      await ordersCollection.doc(String(orderId)).set(order);
+      return normalizeOrder(order);
+    },
+    () => createMemoryOrder(sessionId, items, total, userId, userEmail, shipping, paymentMethod, payOnDeliveryLimit, paymentPhone, options)
+  );
 }
 
 export async function updateOrderStatus(orderId: number, status: OrderStatus): Promise<Order | null> {
   const now = new Date().toISOString();
-  
-  if (!ordersCollection) {
-    const order = memoryOrders.get(orderId);
-    if (!order) return null;
-    order.status = status;
-    if (!order.statusHistory) {
-      order.statusHistory = [];
+
+  return withOrdersFallback(
+    async () => {
+      const docRef = ordersCollection!.doc(String(orderId));
+      const doc = await docRef.get();
+      if (!doc.exists) return null;
+
+      const order = doc.data() as Order;
+      order.status = status;
+      if (!order.statusHistory) {
+        order.statusHistory = [];
+      }
+      order.statusHistory.push({ status, date: now });
+
+      await docRef.update({
+        status: order.status,
+        statusHistory: order.statusHistory,
+      });
+
+      return normalizeOrder(order);
+    },
+    () => {
+      const order = memoryOrders.get(orderId);
+      if (!order) return null;
+      order.status = status;
+      if (!order.statusHistory) {
+        order.statusHistory = [];
+      }
+      order.statusHistory.push({ status, date: now });
+      memoryOrders.set(orderId, order);
+      return normalizeOrder(order);
     }
-    order.statusHistory.push({ status, date: now });
-    memoryOrders.set(orderId, order);
-    return normalizeOrder(order);
-  }
-
-  const docRef = ordersCollection.doc(String(orderId));
-  const doc = await docRef.get();
-  if (!doc.exists) return null;
-
-  const order = doc.data() as Order;
-  order.status = status;
-  if (!order.statusHistory) {
-    order.statusHistory = [];
-  }
-  order.statusHistory.push({ status, date: now });
-
-  await docRef.update({
-    status: order.status,
-    statusHistory: order.statusHistory
-  });
-  
-  return normalizeOrder(order);
+  );
 }
 
 async function saveOrder(orderId: number, order: Order): Promise<Order> {
   const normalized = normalizeOrder(order);
-  if (!ordersCollection) {
-    memoryOrders.set(orderId, normalized);
-    return normalized;
-  }
 
-  await ordersCollection.doc(String(orderId)).set(normalized);
-  return normalized;
+  return withOrdersFallback(
+    async () => {
+      await ordersCollection!.doc(String(orderId)).set(normalized);
+      return normalized;
+    },
+    () => {
+      memoryOrders.set(orderId, normalized);
+      return normalized;
+    }
+  );
 }
 
 export async function getOrders(): Promise<Order[]> {
-  if (!ordersCollection) {
-    return Array.from(memoryOrders.values()).map(normalizeOrder).sort((a, b) => a.orderId - b.orderId);
-  }
-  const snapshot = await ordersCollection.orderBy("orderId", "asc").get();
-  return snapshot.docs.map((d) => normalizeOrder(d.data() as Order));
+  return withOrdersFallback(
+    async () => {
+      const snapshot = await ordersCollection!.orderBy("orderId", "asc").get();
+      return snapshot.docs.map((d) => normalizeOrder(d.data() as Order));
+    },
+    () => Array.from(memoryOrders.values()).map(normalizeOrder).sort((a, b) => a.orderId - b.orderId)
+  );
 }
 
 export async function getOrdersBySession(sessionId: string): Promise<Order[]> {
-  if (!ordersCollection) {
-    return Array.from(memoryOrders.values())
+  return withOrdersFallback(
+    async () => {
+      const snapshot = await ordersCollection!
+        .where("sessionId", "==", sessionId)
+        .get();
+      return snapshot.docs
+        .map((d) => normalizeOrder(d.data() as Order))
+        .sort((a, b) => a.orderId - b.orderId);
+    },
+    () => Array.from(memoryOrders.values())
       .map(normalizeOrder)
       .filter((o) => o.sessionId === sessionId)
-      .sort((a, b) => a.orderId - b.orderId);
-  }
-  const snapshot = await ordersCollection
-    .where("sessionId", "==", sessionId)
-    .get();
-  return snapshot.docs
-    .map((d) => normalizeOrder(d.data() as Order))
-    .sort((a, b) => a.orderId - b.orderId);
+      .sort((a, b) => a.orderId - b.orderId)
+  );
 }
 
 export async function getOrdersByUser(userId: string): Promise<Order[]> {
-  if (!ordersCollection) {
-    return Array.from(memoryOrders.values())
+  return withOrdersFallback(
+    async () => {
+      const snapshot = await ordersCollection!
+        .where("userId", "==", userId)
+        .get();
+      return snapshot.docs
+        .map((d) => normalizeOrder(d.data() as Order))
+        .sort((a, b) => a.orderId - b.orderId);
+    },
+    () => Array.from(memoryOrders.values())
       .map(normalizeOrder)
       .filter((o) => o.userId === userId)
-      .sort((a, b) => a.orderId - b.orderId);
-  }
-  const snapshot = await ordersCollection
-    .where("userId", "==", userId)
-    .get();
-  return snapshot.docs
-    .map((d) => normalizeOrder(d.data() as Order))
-    .sort((a, b) => a.orderId - b.orderId);
+      .sort((a, b) => a.orderId - b.orderId)
+  );
 }
 
 export async function getShippedOrders(): Promise<Order[]> {
-  if (!ordersCollection) {
-    return Array.from(memoryOrders.values())
+  return withOrdersFallback(
+    async () => {
+      const snapshot = await ordersCollection!
+        .where("status", "==", "Shipped")
+        .get();
+      return snapshot.docs.map((d) => normalizeOrder(d.data() as Order));
+    },
+    () => Array.from(memoryOrders.values())
       .map(normalizeOrder)
       .filter((o) => o.status === "Shipped")
-      .sort((a, b) => a.orderId - b.orderId);
-  }
-  const snapshot = await ordersCollection
-    .where("status", "==", "Shipped")
-    .get();
-  return snapshot.docs.map((d) => normalizeOrder(d.data() as Order));
+      .sort((a, b) => a.orderId - b.orderId)
+  );
 }
 
 export async function getOrderById(orderId: number): Promise<Order | null> {
-  if (!ordersCollection) {
-    const order = memoryOrders.get(orderId);
-    return order ? normalizeOrder(order) : null;
-  }
-  const doc = await ordersCollection.doc(String(orderId)).get();
-  if (!doc.exists) return null;
-  return normalizeOrder(doc.data() as Order);
+  return withOrdersFallback(
+    async () => {
+      const doc = await ordersCollection!.doc(String(orderId)).get();
+      if (!doc.exists) return null;
+      return normalizeOrder(doc.data() as Order);
+    },
+    () => {
+      const order = memoryOrders.get(orderId);
+      return order ? normalizeOrder(order) : null;
+    }
+  );
+}
+
+export async function getOrderByMpesaCheckoutRequestId(checkoutRequestId: string): Promise<Order | null> {
+  return withOrdersFallback(
+    async () => {
+      const snapshot = await ordersCollection!.where("mpesaCheckoutRequestId", "==", checkoutRequestId).limit(1).get();
+      if (snapshot.empty) return null;
+      return normalizeOrder(snapshot.docs[0].data() as Order);
+    },
+    () => {
+      const order = Array.from(memoryOrders.values()).find((entry) => entry.mpesaCheckoutRequestId === checkoutRequestId);
+      return order ? normalizeOrder(order) : null;
+    }
+  );
 }
 
 export async function getAgentOrders(agentId: string): Promise<Order[]> {
-  if (!ordersCollection) {
-    return Array.from(memoryOrders.values())
+  return withOrdersFallback(
+    async () => {
+      const snapshot = await ordersCollection!
+        .where("assignedAgentId", "==", agentId)
+        .get();
+      return snapshot.docs.map((d) => normalizeOrder(d.data() as Order));
+    },
+    () => Array.from(memoryOrders.values())
       .map(normalizeOrder)
       .filter((o) => o.assignedAgentId === agentId)
-      .sort((a, b) => a.orderId - b.orderId);
-  }
-  const snapshot = await ordersCollection
-    .where("assignedAgentId", "==", agentId)
-    .get();
-  return snapshot.docs.map((d) => normalizeOrder(d.data() as Order));
+      .sort((a, b) => a.orderId - b.orderId)
+  );
 }
 
 export async function assignOrderToAgent(orderId: number, agentId: string, agentName: string): Promise<Order | null> {
   const now = new Date().toISOString();
   const nextStatus = "Out for Delivery";
 
-  if (!ordersCollection) {
-    const order = memoryOrders.get(orderId);
-    if (!order) return null;
-    order.status = nextStatus;
-    if (!order.statusHistory) {
-      order.statusHistory = [];
+  return withOrdersFallback(
+    async () => {
+      const docRef = ordersCollection!.doc(String(orderId));
+      const doc = await docRef.get();
+      if (!doc.exists) return null;
+
+      const order = doc.data() as Order;
+      order.status = nextStatus;
+      if (!order.statusHistory) {
+        order.statusHistory = [];
+      }
+      order.statusHistory.push({ status: nextStatus, date: now });
+      order.assignedAgentId = agentId;
+      order.assignedAgentName = agentName;
+
+      await docRef.update({
+        status: order.status,
+        statusHistory: order.statusHistory,
+        assignedAgentId: agentId,
+        assignedAgentName: agentName,
+      });
+
+      return normalizeOrder(order);
+    },
+    () => {
+      const order = memoryOrders.get(orderId);
+      if (!order) return null;
+      order.status = nextStatus;
+      if (!order.statusHistory) {
+        order.statusHistory = [];
+      }
+      order.statusHistory.push({ status: nextStatus, date: now });
+      order.assignedAgentId = agentId;
+      order.assignedAgentName = agentName;
+      memoryOrders.set(orderId, order);
+      return normalizeOrder(order);
     }
-    order.statusHistory.push({ status: nextStatus, date: now });
-    order.assignedAgentId = agentId;
-    order.assignedAgentName = agentName;
-    memoryOrders.set(orderId, order);
-    return normalizeOrder(order);
-  }
-
-  const docRef = ordersCollection.doc(String(orderId));
-  const doc = await docRef.get();
-  if (!doc.exists) return null;
-
-  const order = doc.data() as Order;
-  order.status = nextStatus;
-  if (!order.statusHistory) {
-    order.statusHistory = [];
-  }
-  order.statusHistory.push({ status: nextStatus, date: now });
-  order.assignedAgentId = agentId;
-  order.assignedAgentName = agentName;
-
-  await docRef.update({
-    status: order.status,
-    statusHistory: order.statusHistory,
-    assignedAgentId: agentId,
-    assignedAgentName: agentName
-  });
-
-  return normalizeOrder(order);
+  );
 }
 
 export async function updateOrderComment(orderId: number, comment: string, reviewRating?: number): Promise<Order | null> {
-  if (!ordersCollection) {
-    const order = memoryOrders.get(orderId);
-    if (!order) return null;
-    order.comment = comment;
-    order.reviewRating = reviewRating;
-    memoryOrders.set(orderId, order);
-    return normalizeOrder(order);
-  }
+  return withOrdersFallback(
+    async () => {
+      const docRef = ordersCollection!.doc(String(orderId));
+      const doc = await docRef.get();
+      if (!doc.exists) return null;
 
-  const docRef = ordersCollection.doc(String(orderId));
-  const doc = await docRef.get();
-  if (!doc.exists) return null;
-
-  await docRef.update({ comment, reviewRating });
-  const updated = (await docRef.get()).data() as Order;
-  return normalizeOrder(updated);
+      await docRef.update({ comment, reviewRating });
+      const updated = (await docRef.get()).data() as Order;
+      return normalizeOrder(updated);
+    },
+    () => {
+      const order = memoryOrders.get(orderId);
+      if (!order) return null;
+      order.comment = comment;
+      order.reviewRating = reviewRating;
+      memoryOrders.set(orderId, order);
+      return normalizeOrder(order);
+    }
+  );
 }
 
 export async function confirmAgentDelivery(orderId: number): Promise<Order | null> {
@@ -345,6 +460,29 @@ export async function requestPaymentPrompt(orderId: number): Promise<Order | nul
   return saveOrder(orderId, order);
 }
 
+export async function updateOrderPaymentMeta(
+  orderId: number,
+  updates: Partial<
+    Pick<
+      Order,
+      | "paymentPhone"
+      | "paymentReference"
+      | "paymentRequestedAt"
+      | "paymentLastError"
+      | "mpesaMerchantRequestId"
+      | "mpesaCheckoutRequestId"
+      | "mpesaReceiptNumber"
+      | "paymentStatus"
+    >
+  >
+): Promise<Order | null> {
+  const order = await getOrderById(orderId);
+  if (!order) return null;
+
+  Object.assign(order, updates);
+  return saveOrder(orderId, order);
+}
+
 export async function recordOrderPayment(
   orderId: number,
   amount: number,
@@ -359,6 +497,7 @@ export async function recordOrderPayment(
   order.amountDue = Math.max(0, Number((order.total - order.amountPaid).toFixed(2)));
   order.paymentStatus = order.amountDue === 0 ? "Paid" : order.amountPaid > 0 ? "Partial" : "Unpaid";
   order.paymentHistory = [...(order.paymentHistory || []), { amount: normalizedAmount, date: now, source }];
+  order.paymentLastError = undefined;
 
   return saveOrder(orderId, order);
 }

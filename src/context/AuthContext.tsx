@@ -1,5 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { User } from "firebase/auth";
+import type { UserProfile } from "../../server/types";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -17,17 +18,6 @@ import {
   signInWithPopup,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-
-export interface UserProfile {
-  userId: string;
-  email: string;
-  tier: "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond" | "The Alchemist Circle";
-  role: "Customer" | "Operator" | "Manager" | "DeliveryAgent" | "Admin" | "Marketing";
-  isApproved: boolean;
-  points: number;
-  totalSpent: number;
-  joinedAt: string;
-}
 
 interface AuthContextType {
   user: User | null;

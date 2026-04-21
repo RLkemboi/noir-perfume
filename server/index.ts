@@ -23,13 +23,15 @@ import {
   getAgentOrders,
   confirmAgentDelivery,
   confirmCustomerDelivery,
-  confirmAdminDelivery
-  ,
+  confirmAdminDelivery,
+  getOrderByMpesaCheckoutRequestId,
   requestPaymentPrompt,
-  recordOrderPayment
+  recordOrderPayment,
+  updateOrderPaymentMeta
 } from "./db/orders.js";
-import { getUserProfile, updateUserSpent, getPendingStaff, approveStaff, registerStaffApplication } from "./db/users.js";
+import { adjustUserAccountBalance, getUserProfile, updateUserSpent, getPendingStaff, approveStaff, registerStaffApplication, getStaffMembers, updateStaffProfile } from "./db/users.js";
 import { auth } from "./db/firebase.js";
+import { initiateMpesaStkPush, normalizeMpesaPhone } from "./mpesa.js";
 
 const app = new Hono();
 
@@ -49,7 +51,7 @@ app.use("*", async (c, next) => {
 app.use(
   cors({
     origin: ["http://localhost:5173", "http://localhost:4173", "http://localhost:3000"],
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,
   })
@@ -78,12 +80,46 @@ function getCartTotals(items: CartItem[]) {
   return { count, total: Number(total.toFixed(2)) };
 }
 
+async function getAuthenticatedUser(c: Context) {
+  const authHeader = c.req.header("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+
+  if (!token || !auth) {
+    throw new HTTPException(401, { message: "Unauthorized" });
+  }
+
+  try {
+    return await auth.verifyIdToken(token);
+  } catch {
+    throw new HTTPException(401, { message: "Invalid token" });
+  }
+}
+
+async function ensureOrderAccess(c: Context, order: Order) {
+  const sessionId = c.req.query("sessionId") || "";
+
+  if (order.userId) {
+    const decoded = await getAuthenticatedUser(c);
+    if (decoded.uid !== order.userId) {
+      throw new HTTPException(403, { message: "Forbidden" });
+    }
+    return decoded;
+  }
+
+  if (!isValidUUID(sessionId) || sessionId !== order.sessionId) {
+    throw new HTTPException(403, { message: "Forbidden" });
+  }
+
+  return null;
+}
+
 function isValidUUID(v: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 }
 
 const PAY_ON_DELIVERY_LIMITS: Record<UserTier, number> = {
-  Bronze: 0,
+  Junior: 0,
+  Bronze: 250,
   Silver: 250,
   Gold: 600,
   Platinum: 1200,
@@ -93,6 +129,14 @@ const PAY_ON_DELIVERY_LIMITS: Record<UserTier, number> = {
 
 function getPayOnDeliveryLimit(tier: UserTier): number {
   return PAY_ON_DELIVERY_LIMITS[tier] ?? 0;
+}
+
+function isAccountBalanceTier(tier: UserTier): boolean {
+  return ["Silver", "Gold", "Platinum", "Diamond", "The Alchemist Circle"].includes(tier);
+}
+
+function isBronzeDepositTier(tier: UserTier): boolean {
+  return tier === "Bronze";
 }
 
 function estimateCogsRatio(collection?: string): number {
@@ -164,6 +208,17 @@ function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
     ? ratedOrders.reduce((sum, order) => sum + (order.reviewRating || 0), 0) / ratedOrders.length
     : 0;
   const unitsSold = activeOrders.reduce((sum, order) => sum + order.items.reduce((inner, item) => inner + item.quantity, 0), 0);
+  const resolveWeek = (isoDate: string) => {
+    const date = new Date(isoDate);
+    const weekStart = new Date(date);
+    const day = weekStart.getDay();
+    const diff = weekStart.getDate() - day + (day === 0 ? -6 : 1);
+    weekStart.setDate(diff);
+    weekStart.setHours(0, 0, 0, 0);
+    const key = weekStart.toISOString();
+    const label = weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+    return { key, label, weekStart };
+  };
 
   const weeklyMap = new Map<string, {
     label: string;
@@ -176,17 +231,6 @@ function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
 
   for (const order of orders) {
     const financials = getOrderFinancials(order);
-    const resolveWeek = (isoDate: string) => {
-      const date = new Date(isoDate);
-      const weekStart = new Date(date);
-      const day = weekStart.getDay();
-      const diff = weekStart.getDate() - day + (day === 0 ? -6 : 1);
-      weekStart.setDate(diff);
-      weekStart.setHours(0, 0, 0, 0);
-      const key = weekStart.toISOString();
-      const label = weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-      return { key, label };
-    };
 
     if (!financials.isCancelled) {
       const createdWeek = resolveWeek(order.createdAt);
@@ -211,16 +255,44 @@ function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
     }
   }
 
+  const sortedWeekKeys = Array.from(weeklyMap.keys()).sort((a, b) => (a < b ? -1 : 1));
+  const latestWeekStart = sortedWeekKeys.length > 0
+    ? new Date(sortedWeekKeys[sortedWeekKeys.length - 1])
+    : resolveWeek(new Date().toISOString()).weekStart;
+  const weeklyWindow = Array.from({ length: 8 }, (_, index) => {
+    const weekStart = new Date(latestWeekStart);
+    weekStart.setDate(latestWeekStart.getDate() - (7 - index) * 7);
+    weekStart.setHours(0, 0, 0, 0);
+    return {
+      key: weekStart.toISOString(),
+      label: weekStart.toLocaleDateString(undefined, { month: "short", day: "numeric" }),
+    };
+  });
+
   let cumulativeNetWorth = 0;
-  const weeklyTrend = Array.from(weeklyMap.entries())
-    .sort(([a], [b]) => (a < b ? -1 : 1))
-    .slice(-8)
-    .map(([, week], index, arr) => {
+  let previousEstimatedProfit: number | null = null;
+  const weeklyTrend = weeklyWindow.map(({ key, label }, index) => {
+      const week = weeklyMap.get(key);
+      if (!week) {
+        return {
+          label,
+          bookedRevenue: 0,
+          realizedRevenue: 0,
+          recognizedExpense: 0,
+          estimatedProfit: 0,
+          netWorth: Number(cumulativeNetWorth.toFixed(2)),
+          direction: "flat" as const,
+          trendColor: "red" as const,
+        };
+      }
+
       week.weeklyProfit = Number((week.realizedRevenue - week.recognizedExpense).toFixed(2));
       cumulativeNetWorth += week.weeklyProfit;
       week.netWorth = Number(cumulativeNetWorth.toFixed(2));
-      const previous = arr[index - 1]?.[1]?.weeklyProfit;
-      const direction = previous == null ? "flat" : week.weeklyProfit >= previous ? "up" : "down";
+      const direction = previousEstimatedProfit == null ? "flat" : week.weeklyProfit >= previousEstimatedProfit ? "up" : "down";
+      const trendColor = index === 0 || previousEstimatedProfit == null || week.weeklyProfit <= previousEstimatedProfit ? "red" : "green";
+      previousEstimatedProfit = week.weeklyProfit;
+
       return {
         ...week,
         bookedRevenue: Number(week.bookedRevenue.toFixed(2)),
@@ -229,6 +301,7 @@ function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
         estimatedProfit: Number(week.weeklyProfit.toFixed(2)),
         netWorth: Number(week.netWorth.toFixed(2)),
         direction,
+        trendColor,
       };
     });
 
@@ -358,18 +431,18 @@ app.delete("/api/cart/:sessionId", async (c) => {
 
 // Checkout
 app.post("/api/checkout", async (c) => {
-  let body: { sessionId: string; items: CartItem[]; shipping?: ShippingDetails; paymentMethod?: PaymentMethod };
+  let body: { sessionId: string; items: CartItem[]; shipping?: ShippingDetails; paymentMethod?: PaymentMethod; paymentPhone?: string };
   try {
     body = await c.req.json();
   } catch {
     throw new HTTPException(400, { message: "Invalid JSON body" });
   }
-  const { sessionId, items, shipping, paymentMethod = "Card" } = body;
+  const { sessionId, items, shipping, paymentMethod = "Card", paymentPhone } = body;
 
   if (!sessionId || !isValidUUID(sessionId) || !Array.isArray(items) || items.length === 0) {
     throw new HTTPException(400, { message: "Invalid checkout payload" });
   }
-  if (paymentMethod !== "Card" && paymentMethod !== "PayOnDelivery") {
+  if (paymentMethod !== "Card" && paymentMethod !== "PayOnDelivery" && paymentMethod !== "Mpesa") {
     throw new HTTPException(400, { message: "Invalid payment method" });
   }
 
@@ -397,6 +470,7 @@ app.post("/api/checkout", async (c) => {
   // Verify Firebase token server-side to derive userId/userEmail securely
   let userId: string | undefined;
   let userEmail: string | undefined;
+  let customerProfile: Awaited<ReturnType<typeof getUserProfile>> | undefined;
   const authHeader = c.req.header("Authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
   if (token) {
@@ -412,21 +486,58 @@ app.post("/api/checkout", async (c) => {
     }
   }
 
+  if (userId) {
+    customerProfile = await getUserProfile(userId, userEmail);
+  }
+
+  let payOnDeliveryLimit: number | undefined;
+  let initialAmountPaid: number | undefined;
+  let paymentReference: string | undefined;
+  let paymentPromptCount: number | undefined;
+  let paymentPromptRequestedAt: string | undefined;
+  let accountBalanceDelta = 0;
+  let settledAtCheckoutAmount = 0;
+
   if (paymentMethod === "PayOnDelivery") {
-    if (!userId) {
+    if (!userId || !customerProfile) {
       throw new HTTPException(403, { message: "Pay on delivery is only available to signed-in members." });
     }
-    const profile = await getUserProfile(userId, userEmail);
-    const payOnDeliveryLimit = getPayOnDeliveryLimit(profile.tier);
-    if (payOnDeliveryLimit <= 0) {
-      throw new HTTPException(403, { message: "Pay on delivery unlocks at Silver tier." });
+    payOnDeliveryLimit = getPayOnDeliveryLimit(customerProfile.tier);
+    if (customerProfile.tier === "Junior" || payOnDeliveryLimit <= 0) {
+      throw new HTTPException(403, { message: "Junior members do not yet have pay-on-delivery access." });
     }
     if (Number(total.toFixed(2)) > payOnDeliveryLimit) {
-      throw new HTTPException(403, { message: `Your ${profile.tier} tier pay-on-delivery limit is $${payOnDeliveryLimit.toFixed(2)}.` });
+      throw new HTTPException(403, { message: `Your ${customerProfile.tier} tier pay-on-delivery limit is $${payOnDeliveryLimit.toFixed(2)}.` });
+    }
+
+    if (isBronzeDepositTier(customerProfile.tier)) {
+      initialAmountPaid = Number((total * 0.5).toFixed(2));
+      settledAtCheckoutAmount = initialAmountPaid;
+      paymentReference = "BRONZE-50PCT-DEPOSIT";
+      paymentPromptCount = 0;
+    } else if (isAccountBalanceTier(customerProfile.tier)) {
+      initialAmountPaid = Number(total.toFixed(2));
+      settledAtCheckoutAmount = initialAmountPaid;
+      accountBalanceDelta = -initialAmountPaid;
+      paymentReference = (customerProfile.accountBalance ?? 0) >= total ? "ACCOUNT_BALANCE" : "ACCOUNT_CREDIT";
+      paymentPromptCount = 0;
+      paymentPromptRequestedAt = undefined;
     }
   }
 
-  const payOnDeliveryLimit = userId ? getPayOnDeliveryLimit((await getUserProfile(userId, userEmail)).tier) : undefined;
+  let normalizedPaymentPhone: string | undefined;
+  if (paymentMethod === "Mpesa") {
+    const candidatePhone = paymentPhone || shipping?.phone;
+    if (!candidatePhone) {
+      throw new HTTPException(400, { message: "An M-Pesa phone number is required for STK push." });
+    }
+    try {
+      normalizedPaymentPhone = normalizeMpesaPhone(candidatePhone);
+    } catch (err) {
+      throw new HTTPException(400, { message: err instanceof Error ? err.message : "Invalid M-Pesa phone number." });
+    }
+  }
+
   const order = await createOrder(
     sessionId,
     validatedItems,
@@ -435,12 +546,65 @@ app.post("/api/checkout", async (c) => {
     userEmail,
     shipping,
     paymentMethod,
-    paymentMethod === "PayOnDelivery" ? payOnDeliveryLimit : undefined
+    paymentMethod === "PayOnDelivery" ? payOnDeliveryLimit : undefined,
+    normalizedPaymentPhone,
+    {
+      initialAmountPaid,
+      paymentReference,
+      paymentPromptCount,
+      paymentPromptRequestedAt,
+    }
   );
+
+  if (paymentMethod === "Mpesa" && normalizedPaymentPhone) {
+    try {
+      const stk = await initiateMpesaStkPush({
+        amount: order.total,
+        phoneNumber: normalizedPaymentPhone,
+        accountReference: `ORDER-${order.orderId}`,
+        transactionDesc: `Noir Perfume order ${order.orderId}`,
+      });
+
+      await updateOrderPaymentMeta(order.orderId, {
+        paymentPhone: normalizedPaymentPhone,
+        paymentRequestedAt: new Date().toISOString(),
+        paymentLastError: undefined,
+        mpesaMerchantRequestId: stk.merchantRequestId,
+        mpesaCheckoutRequestId: stk.checkoutRequestId,
+      });
+      await deleteCart(sessionId);
+
+      return c.json({
+        success: true,
+        orderId: order.orderId,
+        total: order.total,
+        mpesa: {
+          checkoutRequestId: stk.checkoutRequestId,
+          customerMessage: stk.customerMessage,
+          mock: stk.mock,
+        },
+      });
+    } catch (err) {
+      await updateOrderPaymentMeta(order.orderId, {
+        paymentPhone: normalizedPaymentPhone,
+        paymentRequestedAt: new Date().toISOString(),
+        paymentLastError: err instanceof Error ? err.message : "M-Pesa STK push failed.",
+      });
+      throw new HTTPException(502, { message: err instanceof Error ? err.message : "M-Pesa STK push failed." });
+    }
+  }
+
   await deleteCart(sessionId);
 
-  if (userId) {
-    await updateUserSpent(userId, order.total);
+  if (paymentMethod === "PayOnDelivery" && userId && accountBalanceDelta !== 0) {
+    await adjustUserAccountBalance(userId, accountBalanceDelta);
+  }
+
+  if (userId && paymentMethod !== "Mpesa") {
+    const spendAmount = paymentMethod === "PayOnDelivery" ? settledAtCheckoutAmount : order.total;
+    if (spendAmount > 0) {
+      await updateUserSpent(userId, spendAmount);
+    }
   }
 
   return c.json({ success: true, orderId: order.orderId, total: order.total });
@@ -465,6 +629,25 @@ app.post("/api/checkout", async (c) => {
   } catch {
     throw new HTTPException(401, { message: "Invalid token" });
   }
+  });
+
+  app.post("/api/user/account/deposit", async (c) => {
+    const decoded = await getAuthenticatedUser(c);
+
+    let body: { amount: number };
+    try {
+      body = await c.req.json();
+    } catch {
+      throw new HTTPException(400, { message: "Invalid deposit body" });
+    }
+
+    if (!Number.isFinite(body.amount) || body.amount <= 0) {
+      throw new HTTPException(400, { message: "Deposit amount must be greater than zero." });
+    }
+
+    // TODO: Replace this simplified balance mutation with a proper account ledger.
+    const profile = await adjustUserAccountBalance(decoded.uid, Number(body.amount.toFixed(2)));
+    return c.json({ success: true, profile });
   });
 
   // Simulation: Advance order status
@@ -544,6 +727,10 @@ app.post("/api/checkout", async (c) => {
       throw new HTTPException(403, { message: "Forbidden" });
     }
 
+    if (order.amountDue <= 0) {
+      throw new HTTPException(400, { message: "This delivery order has no remaining balance." });
+    }
+
     const updated = await requestPaymentPrompt(orderId);
     return c.json({ success: true, order: updated, message: "Payment prompt requested." });
   });
@@ -553,7 +740,7 @@ app.post("/api/checkout", async (c) => {
     const order = await getOrderById(orderId);
     if (!order) throw new HTTPException(404, { message: "Order not found" });
     if (order.paymentMethod !== "PayOnDelivery") {
-      throw new HTTPException(400, { message: "This order was already paid by card." });
+      throw new HTTPException(400, { message: order.paymentMethod === "Mpesa" ? "Use M-Pesa STK push for this order." : "This order was already paid by card." });
     }
 
     let body: { amount: number };
@@ -563,27 +750,157 @@ app.post("/api/checkout", async (c) => {
       throw new HTTPException(400, { message: "Invalid payment body" });
     }
 
+    const access = await ensureOrderAccess(c, order);
     if (!Number.isFinite(body.amount) || body.amount <= 0) {
       throw new HTTPException(400, { message: "Payment amount must be greater than zero." });
     }
     if (body.amount > order.amountDue) {
       throw new HTTPException(400, { message: "Payment amount exceeds the remaining balance." });
     }
-
-    const authHeader = c.req.header("Authorization") || "";
-    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
-    const sessionId = c.req.query("sessionId") || "";
-
-    if (order.userId) {
-      if (!token || !auth) throw new HTTPException(401, { message: "Unauthorized" });
-      const decoded = await auth.verifyIdToken(token);
-      if (decoded.uid !== order.userId) throw new HTTPException(403, { message: "Forbidden" });
-    } else if (!isValidUUID(sessionId) || sessionId !== order.sessionId) {
-      throw new HTTPException(403, { message: "Forbidden" });
+    if (Number(body.amount.toFixed(2)) !== Number(order.amountDue.toFixed(2))) {
+      throw new HTTPException(400, { message: "Delivery orders now require settling the full remaining balance at once." });
     }
 
-    const updated = await recordOrderPayment(orderId, Number(body.amount.toFixed(2)));
+    const settledAmount = Number(order.amountDue.toFixed(2));
+    const updated = await recordOrderPayment(orderId, settledAmount);
+    if (updated?.userId) {
+      await updateUserSpent(updated.userId, settledAmount);
+    } else if (access && "uid" in access) {
+      await updateUserSpent(access.uid, settledAmount);
+    }
     return c.json({ success: true, order: updated });
+  });
+
+  app.post("/api/orders/:orderId/mpesa-stk", async (c) => {
+    const orderId = Number(c.req.param("orderId"));
+    const order = await getOrderById(orderId);
+    if (!order) throw new HTTPException(404, { message: "Order not found" });
+    if (order.paymentMethod !== "Mpesa") {
+      throw new HTTPException(400, { message: "This order was not created for M-Pesa payment." });
+    }
+    if (order.amountDue <= 0) {
+      throw new HTTPException(400, { message: "This order has already been paid." });
+    }
+
+    await ensureOrderAccess(c, order);
+
+    let body: { phoneNumber?: string };
+    try {
+      body = await c.req.json();
+    } catch {
+      body = {};
+    }
+
+    const candidatePhone = body.phoneNumber || order.paymentPhone || order.shipping?.phone;
+    if (!candidatePhone) {
+      throw new HTTPException(400, { message: "Provide a valid M-Pesa phone number to send the STK push." });
+    }
+
+    let normalizedPhone: string;
+    try {
+      normalizedPhone = normalizeMpesaPhone(candidatePhone);
+    } catch (err) {
+      throw new HTTPException(400, { message: err instanceof Error ? err.message : "Invalid M-Pesa phone number." });
+    }
+
+    try {
+      const stk = await initiateMpesaStkPush({
+        amount: order.amountDue,
+        phoneNumber: normalizedPhone,
+        accountReference: `ORDER-${order.orderId}`,
+        transactionDesc: `Balance for Noir Perfume order ${order.orderId}`,
+      });
+
+      const updated = await updateOrderPaymentMeta(order.orderId, {
+        paymentPhone: normalizedPhone,
+        paymentRequestedAt: new Date().toISOString(),
+        paymentLastError: undefined,
+        mpesaMerchantRequestId: stk.merchantRequestId,
+        mpesaCheckoutRequestId: stk.checkoutRequestId,
+      });
+
+      return c.json({
+        success: true,
+        order: updated,
+        mpesa: {
+          checkoutRequestId: stk.checkoutRequestId,
+          customerMessage: stk.customerMessage,
+          mock: stk.mock,
+        },
+      });
+    } catch (err) {
+      await updateOrderPaymentMeta(order.orderId, {
+        paymentPhone: normalizedPhone,
+        paymentRequestedAt: new Date().toISOString(),
+        paymentLastError: err instanceof Error ? err.message : "M-Pesa STK push failed.",
+      });
+
+      throw new HTTPException(502, { message: err instanceof Error ? err.message : "M-Pesa STK push failed." });
+    }
+  });
+
+  app.post("/api/payments/mpesa/callback", async (c) => {
+    const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
+    const callback = ((body as {
+      Body?: {
+        stkCallback?: {
+          CheckoutRequestID?: string;
+          MerchantRequestID?: string;
+          ResultCode?: number;
+          ResultDesc?: string;
+          CallbackMetadata?: { Item?: Array<{ Name?: string; Value?: string | number }> };
+        };
+      };
+    }).Body?.stkCallback);
+
+    if (!callback?.CheckoutRequestID) {
+      throw new HTTPException(400, { message: "Invalid M-Pesa callback payload." });
+    }
+
+    const order = await getOrderByMpesaCheckoutRequestId(callback.CheckoutRequestID);
+    if (!order) {
+      return c.json({ success: true, ignored: true });
+    }
+
+    const metadata = callback.CallbackMetadata?.Item || [];
+    const findValue = (name: string) => metadata.find((entry) => entry.Name === name)?.Value;
+
+    if (callback.ResultCode === 0) {
+      const amount = Number(findValue("Amount") || order.amountDue || order.total);
+      const receiptNumber = String(findValue("MpesaReceiptNumber") || "");
+      const phoneNumber = String(findValue("PhoneNumber") || order.paymentPhone || "");
+
+      if ((receiptNumber && order.mpesaReceiptNumber === receiptNumber) || order.amountDue <= 0) {
+        return c.json({ success: true, duplicate: true });
+      }
+
+      const wasUnpaid = order.amountDue > 0;
+      const updated = await recordOrderPayment(order.orderId, Number(amount.toFixed(2)), "mpesa_stk");
+      if (updated) {
+        await updateOrderPaymentMeta(order.orderId, {
+          paymentPhone: phoneNumber || order.paymentPhone,
+          paymentReference: receiptNumber || updated.paymentReference,
+          mpesaReceiptNumber: receiptNumber || updated.mpesaReceiptNumber,
+          paymentLastError: undefined,
+          mpesaMerchantRequestId: callback.MerchantRequestID || updated.mpesaMerchantRequestId,
+          mpesaCheckoutRequestId: callback.CheckoutRequestID || updated.mpesaCheckoutRequestId,
+        });
+      }
+
+      if (wasUnpaid && order.userId) {
+        await updateUserSpent(order.userId, Number(amount.toFixed(2)));
+      }
+
+      return c.json({ success: true });
+    }
+
+    await updateOrderPaymentMeta(order.orderId, {
+      paymentLastError: callback.ResultDesc || "M-Pesa payment failed.",
+      mpesaMerchantRequestId: callback.MerchantRequestID || order.mpesaMerchantRequestId,
+      mpesaCheckoutRequestId: callback.CheckoutRequestID || order.mpesaCheckoutRequestId,
+    });
+
+    return c.json({ success: true });
   });
 
   // Staff: Get orders ready for pickup/delivery (Shipped)
@@ -872,6 +1189,48 @@ app.post("/api/checkout", async (c) => {
     }
   });
 
+  app.get("/api/admin/staff", checkAdmin, async (c) => {
+    try {
+      const staff = await getStaffMembers();
+      return c.json({ staff, count: staff.length });
+    } catch (err) {
+      console.error("[Admin API] Failed to fetch staff:", err);
+      throw new HTTPException(500, { message: "Failed to fetch staff directory" });
+    }
+  });
+
+  app.patch("/api/admin/staff/:userId", checkAdmin, async (c) => {
+    const targetUserId = c.req.param("userId");
+    const admin = await getAuthenticatedUser(c);
+
+    let body: Partial<{
+      role: UserRole;
+      isApproved: boolean;
+      employmentStatus: "Active" | "PendingApproval" | "Suspended";
+      department: string;
+      hrNotes: string;
+    }>;
+
+    try {
+      body = await c.req.json();
+    } catch {
+      throw new HTTPException(400, { message: "Invalid JSON body" });
+    }
+
+    if (targetUserId === admin.uid && (body.role && body.role !== "Admin")) {
+      throw new HTTPException(400, { message: "Admins cannot remove their own admin role from this panel." });
+    }
+
+    if (targetUserId === admin.uid && body.employmentStatus === "Suspended") {
+      throw new HTTPException(400, { message: "Admins cannot suspend themselves." });
+    }
+
+    const updated = await updateStaffProfile(targetUserId, body);
+    if (!updated) throw new HTTPException(404, { message: "Employee not found" });
+
+    return c.json({ success: true, profile: updated });
+  });
+
   app.put("/api/admin/orders/:orderId/status", checkAdmin, async (c) => {
   const orderId = Number(c.req.param("orderId"));
   if (!Number.isFinite(orderId)) {
@@ -910,6 +1269,9 @@ app.post("/api/checkout", async (c) => {
     if (!order) throw new HTTPException(404, { message: "Order not found" });
     if (!order.agentDeliveryConfirmed || !order.customerDeliveryConfirmed) {
       throw new HTTPException(400, { message: "Both customer and delivery agent must confirm before admin finalization." });
+    }
+    if (order.amountDue > 0 || order.paymentStatus !== "Paid") {
+      throw new HTTPException(400, { message: "Orders can only be finalized after payment has been completed in full." });
     }
 
     const updated = await confirmAdminDelivery(orderId);

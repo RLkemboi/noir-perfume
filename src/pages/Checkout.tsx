@@ -29,12 +29,15 @@ interface SavedAddress extends ShippingForm {
 
 const SHIPPING_COST = 15;
 const COD_LIMITS: Record<string, number> = {
+  Bronze: 250,
   Silver: 250,
   Gold: 600,
   Platinum: 1200,
   Diamond: 2500,
   "The Alchemist Circle": 5000,
 };
+
+const ACCOUNT_BALANCE_TIERS = ["Silver", "Gold", "Platinum", "Diamond", "The Alchemist Circle"] as const;
 
 function safeReadAddresses(key: string): SavedAddress[] {
   try {
@@ -87,11 +90,17 @@ export default function Checkout() {
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
   const [saveAddressForFuture, setSaveAddressForFuture] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Card");
+  const [mpesaPhone, setMpesaPhone] = useState("");
+  const [completionNote, setCompletionNote] = useState("Your luxury fragrance journey has begun.");
 
   const total = subtotal + (subtotal > 0 ? SHIPPING_COST : 0);
   const savedAddressKey = user ? `noir-saved-addresses:${user.uid}` : "";
-  const canPayOnDelivery = !!profile && ["Silver", "Gold", "Platinum", "Diamond", "The Alchemist Circle"].includes(profile.tier);
+  const canPayOnDelivery = !!profile && profile.tier !== "Junior";
+  const usesAccountBalance = !!profile && ACCOUNT_BALANCE_TIERS.includes(profile.tier as typeof ACCOUNT_BALANCE_TIERS[number]);
+  const needsBronzeDeposit = profile?.tier === "Bronze";
   const payOnDeliveryLimit = profile ? COD_LIMITS[profile.tier] ?? 0 : 0;
+  const bronzeDepositAmount = Number((total * 0.5).toFixed(2));
+  const projectedAccountBalance = Number(((profile?.accountBalance ?? 0) - total).toFixed(2));
 
   const lineTotal = (price: string, qty: number) => {
     const val = Number(price.replace(/[^0-9.]/g, "")) || 0;
@@ -109,6 +118,12 @@ export default function Checkout() {
       email: user?.email || prev.email,
     }));
   }, [user]);
+
+  useEffect(() => {
+    if (!mpesaPhone && shipping.phone) {
+      setMpesaPhone(shipping.phone);
+    }
+  }, [shipping.phone, mpesaPhone]);
 
   useEffect(() => {
     if (!savedAddressKey) {
@@ -192,7 +207,12 @@ export default function Checkout() {
     }
 
     if (paymentMethod === "PayOnDelivery" && !canPayOnDelivery) {
-      toast.error("Pay on delivery unlocks at Silver tier.");
+      toast.error("Junior members do not yet have pay-on-delivery access.");
+      return;
+    }
+
+    if (paymentMethod === "Mpesa" && !mpesaPhone.trim()) {
+      toast.error("Enter the M-Pesa number that should receive the STK push.");
       return;
     }
 
@@ -217,6 +237,7 @@ export default function Checkout() {
           items,
           shipping: { ...shipping, source: addressMode },
           paymentMethod,
+          paymentPhone: paymentMethod === "Mpesa" ? mpesaPhone : undefined,
         }),
       });
 
@@ -229,9 +250,21 @@ export default function Checkout() {
       persistSavedAddress();
       clearCart();
       setCompleted(true);
+      setCompletionNote(
+        paymentMethod === "Mpesa"
+          ? data.mpesa?.customerMessage || "Check your phone and complete the M-Pesa STK prompt to finish payment."
+          : paymentMethod === "PayOnDelivery" && usesAccountBalance
+            ? `This order has been posted to your running account. Projected balance: $${projectedAccountBalance.toFixed(2)}.`
+            : paymentMethod === "PayOnDelivery" && needsBronzeDeposit
+              ? `Your 50% Bronze deposit of $${bronzeDepositAmount.toFixed(2)} is recorded. The remaining $${Math.max(0, total - bronzeDepositAmount).toFixed(2)} must be cleared before admin finalization.`
+          : "Your luxury fragrance journey has begun."
+      );
       await refreshProfile();
       toast.success(`Order #${data.orderId} confirmed`, {
-        description: `Total: $${data.total}`,
+        description:
+          paymentMethod === "Mpesa"
+            ? data.mpesa?.customerMessage || `STK push sent to ${mpesaPhone}.`
+            : `Total: $${data.total}`,
         className: "glass-panel border-primary/20",
       });
     } catch (err) {
@@ -262,7 +295,7 @@ export default function Checkout() {
           <div>
             <h1 className="font-serif text-3xl font-bold mb-2">Order Confirmed</h1>
             <p className="text-muted-foreground font-sans">
-              Thank you, {shipping.fullName}. Your luxury fragrance journey has begun.
+              Thank you, {shipping.fullName}. {completionNote}
             </p>
           </div>
 
@@ -714,7 +747,14 @@ export default function Checkout() {
                       onClick={() => setPaymentMethod("Card")}
                       className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors ${paymentMethod === "Card" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
                     >
-                      Pay Now
+                      Card / Existing Pay Now
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod("Mpesa")}
+                      className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors ${paymentMethod === "Mpesa" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
+                    >
+                      M-Pesa STK Push
                     </button>
                     <button
                       type="button"
@@ -722,13 +762,41 @@ export default function Checkout() {
                       disabled={!canPayOnDelivery}
                       className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors disabled:opacity-50 ${paymentMethod === "PayOnDelivery" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
                     >
-                      Pay on Delivery
+                      {needsBronzeDeposit ? "Bronze 50% Deposit" : usesAccountBalance ? "Account Balance / Credit" : "Pay on Delivery"}
                     </button>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">
-                      {canPayOnDelivery
-                        ? `Unlocked for your ${profile?.tier} tier up to $${payOnDeliveryLimit.toFixed(2)} per order.`
-                        : "Pay on delivery becomes available from Silver tier upward."}
+                      {!profile
+                        ? "Sign in to unlock tier-based delivery payment options."
+                        : profile.tier === "Junior"
+                          ? "Junior tier does not include pay on delivery yet."
+                          : needsBronzeDeposit
+                            ? `Bronze orders require a 50% upfront deposit of $${bronzeDepositAmount.toFixed(2)}. Limit: $${payOnDeliveryLimit.toFixed(2)} per order.`
+                            : `Your ${profile.tier} account can carry this order up to $${payOnDeliveryLimit.toFixed(2)}. Projected balance after checkout: $${projectedAccountBalance.toFixed(2)}.`}
                     </p>
+                    {paymentMethod === "PayOnDelivery" && profile && (
+                      <div className="rounded border border-primary/20 bg-primary/5 p-4 text-[10px] text-muted-foreground leading-relaxed">
+                        {needsBronzeDeposit
+                          ? `Bronze members pay 50% now and clear the rest before admin delivery finalization.`
+                          : `Silver tier and above now use a running account balance instead of per-order partial payments. Positive balances act as deposits. Negative balances represent credit to settle later.`}
+                      </div>
+                    )}
+                    {paymentMethod === "Mpesa" && (
+                      <div className="space-y-2 rounded border border-primary/20 bg-primary/5 p-4">
+                        <label className="text-[10px] tracking-widest uppercase text-primary font-bold">
+                          M-Pesa Phone
+                        </label>
+                        <input
+                          type="tel"
+                          value={mpesaPhone}
+                          onChange={(e) => setMpesaPhone(e.target.value)}
+                          placeholder="0712345678"
+                          className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          The STK push will be sent to this Safaricom line and charged to your Buy Goods till setup on the server.
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   <button

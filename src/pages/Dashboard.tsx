@@ -9,7 +9,7 @@ import { TierBadge } from "@/components/ui/TierBadge";
 import type { Order } from "../../server/types";
 
 export default function Dashboard() {
-  const { user, profile, logout, isGuest, getIdToken, loading: authLoading } = useAuth();
+  const { user, profile, logout, isGuest, getIdToken, refreshProfile, loading: authLoading } = useAuth();
   const { sessionId } = useCart();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
@@ -21,7 +21,10 @@ export default function Dashboard() {
   const [confirmingReceiptId, setConfirmingReceiptId] = useState<number | null>(null);
   const [requestingPromptId, setRequestingPromptId] = useState<number | null>(null);
   const [payingOrderId, setPayingOrderId] = useState<number | null>(null);
-  const [paymentAmount, setPaymentAmount] = useState<Record<number, string>>({});
+  const [requestingMpesaId, setRequestingMpesaId] = useState<number | null>(null);
+  const [mpesaPhone, setMpesaPhone] = useState<Record<number, string>>({});
+  const [depositAmount, setDepositAmount] = useState("");
+  const [depositing, setDepositing] = useState(false);
 
   useEffect(() => {
     // Role-based redirection for approved staff
@@ -181,11 +184,10 @@ export default function Dashboard() {
     }
   };
 
-  const handlePayNow = async (order: Order, payFull = false) => {
-    const rawAmount = payFull ? String(order.amountDue) : paymentAmount[order.orderId];
-    const amount = Number(rawAmount);
+  const handlePayNow = async (order: Order) => {
+    const amount = Number(order.amountDue);
     if (!Number.isFinite(amount) || amount <= 0) {
-      toast.error("Enter a valid payment amount.");
+      toast.error("This order has no remaining balance.");
       return;
     }
 
@@ -201,12 +203,63 @@ export default function Dashboard() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Payment failed");
       setOrders((prev) => prev.map((entry) => (entry.orderId === order.orderId ? data.order : entry)));
-      setPaymentAmount((prev) => ({ ...prev, [order.orderId]: "" }));
-      toast.success(amount >= order.amountDue ? "Order paid in full." : "Partial payment recorded.");
+      toast.success("Remaining order balance cleared.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Payment failed");
     } finally {
       setPayingOrderId(null);
+    }
+  };
+
+  const handleDeposit = async () => {
+    const amount = Number(depositAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      toast.error("Enter a valid deposit amount.");
+      return;
+    }
+
+    setDepositing(true);
+    try {
+      const token = await getIdToken();
+      const res = await fetch("/api/user/account/deposit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ amount }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Deposit failed");
+      await refreshProfile();
+      setDepositAmount("");
+      toast.success(`$${amount.toFixed(2)} added to your account balance.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Deposit failed");
+    } finally {
+      setDepositing(false);
+    }
+  };
+
+  const handleMpesaRetry = async (order: Order) => {
+    setRequestingMpesaId(order.orderId);
+    try {
+      const { headers, suffix } = await buildOrderAccess();
+      headers["Content-Type"] = "application/json";
+      const res = await fetch(`/api/orders/${order.orderId}/mpesa-stk${suffix}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ phoneNumber: mpesaPhone[order.orderId] || order.paymentPhone || order.shipping?.phone || "" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Failed to send M-Pesa prompt");
+      setOrders((prev) => prev.map((entry) => (entry.orderId === order.orderId ? data.order : entry)));
+      toast.success(data.mpesa?.customerMessage || "M-Pesa STK push sent.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send M-Pesa prompt");
+    } finally {
+      setRequestingMpesaId(null);
     }
   };
 
@@ -299,8 +352,12 @@ export default function Dashboard() {
               {profile ? (
                 <>
                   <Sparkles className="w-6 h-6 text-primary mx-auto mb-2" />
-                  <p className="text-2xl font-serif font-bold">{profile.points || 0}</p>
-                  <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">Noir Points</p>
+                  <p className={`text-2xl font-serif font-bold ${(profile.accountBalance ?? 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                    ${Math.abs(profile.accountBalance ?? 0).toFixed(2)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">
+                    {(profile.accountBalance ?? 0) >= 0 ? "Account Balance" : "Account Credit Owed"}
+                  </p>
                 </>
               ) : (
                 <>
@@ -317,6 +374,7 @@ export default function Dashboard() {
                 <div className="flex flex-col items-center justify-center h-full">
                   <TierBadge tier={profile.tier} className="mb-2" />
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">Current Tier</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{profile.points || 0} Noir Points</p>
                 </div>
               ) : (
                 <>
@@ -327,6 +385,46 @@ export default function Dashboard() {
               )}
             </div>
           </div>
+
+          {user && profile && (
+            <div className="glass-panel p-6 mb-8 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <h2 className="font-serif text-xl font-bold">Account Balance</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Silver tier and above can use account credit at checkout. Bronze pays a 50% delivery deposit. Junior has no delivery credit yet.
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Current Balance</p>
+                  <p className={`text-2xl font-serif font-bold ${(profile.accountBalance ?? 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
+                    ${(profile.accountBalance ?? 0).toFixed(2)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-col md:flex-row gap-3">
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={depositAmount}
+                  onChange={(e) => setDepositAmount(e.target.value)}
+                  placeholder="Add funds to your account"
+                  className="flex-1 bg-background border border-border px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
+                />
+                <button
+                  onClick={handleDeposit}
+                  disabled={depositing}
+                  className="px-4 py-2 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light disabled:opacity-50"
+                >
+                  {depositing ? "Adding..." : "Add Funds"}
+                </button>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Positive balances are prepaid deposits. Negative balances show purchases taken on account and still to be settled.
+              </p>
+            </div>
+          )}
 
           <div className="glass-panel p-6">
             <h2 className="font-serif text-xl font-bold mb-4 flex items-center gap-2">
@@ -423,11 +521,32 @@ export default function Dashboard() {
                           </div>
                           <div className="space-y-2">
                             <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Payment</p>
-                            <p className="text-sm">{order.paymentMethod === "PayOnDelivery" ? "Pay on Delivery" : "Card"}</p>
+                            <p className="text-sm">
+                              {order.paymentMethod === "PayOnDelivery"
+                                ? order.paymentReference === "BRONZE-50PCT-DEPOSIT"
+                                  ? "Bronze Delivery Deposit"
+                                  : "Account Balance / Credit"
+                                : order.paymentMethod === "Mpesa"
+                                  ? "M-Pesa STK Push"
+                                  : "Card"}
+                            </p>
                             {order.paymentMethod === "PayOnDelivery" && (
-                              <p className="text-xs text-muted-foreground">
-                                Paid ${order.amountPaid.toFixed(2)} of ${order.total.toFixed(2)}. Remaining: ${order.amountDue.toFixed(2)}.
-                              </p>
+                              <div className="space-y-1 text-xs text-muted-foreground">
+                                <p>Paid ${order.amountPaid.toFixed(2)} of ${order.total.toFixed(2)}. Remaining: ${order.amountDue.toFixed(2)}.</p>
+                                <p>
+                                  {order.paymentReference === "BRONZE-50PCT-DEPOSIT"
+                                    ? "Bronze orders require the full remaining balance before admin finalization."
+                                    : "Silver tier and above use a running account balance instead of per-order partial payments."}
+                                </p>
+                              </div>
+                            )}
+                            {order.paymentMethod === "Mpesa" && (
+                              <div className="space-y-1 text-xs text-muted-foreground">
+                                <p>Paid ${order.amountPaid.toFixed(2)} of ${order.total.toFixed(2)}. Remaining: ${order.amountDue.toFixed(2)}.</p>
+                                {order.paymentPhone && <p>Phone: {order.paymentPhone}</p>}
+                                {order.paymentReference && <p>Receipt: {order.paymentReference}</p>}
+                                {order.paymentLastError && <p className="text-destructive">{order.paymentLastError}</p>}
+                              </div>
                             )}
                             <p className={`inline-flex px-2 py-1 rounded text-[10px] font-bold uppercase tracking-widest ${getConfirmationTone(order)}`}>
                               {order.customerDeliveryConfirmed && order.agentDeliveryConfirmed
@@ -476,43 +595,60 @@ export default function Dashboard() {
                                   {order.payOnDeliveryLimit ? ` • Tier limit: $${order.payOnDeliveryLimit.toFixed(2)}` : ""}
                                 </p>
                               </div>
-                              <button
-                                onClick={() => handleRequestPaymentPrompt(order)}
-                                disabled={requestingPromptId === order.orderId}
-                                className="px-4 py-2 border border-border text-[10px] tracking-widest uppercase font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-50"
-                              >
-                                {requestingPromptId === order.orderId ? "Sending..." : "Request Payment Prompt"}
-                              </button>
+                              {order.amountDue > 0 && (
+                                <button
+                                  onClick={() => handleRequestPaymentPrompt(order)}
+                                  disabled={requestingPromptId === order.orderId}
+                                  className="px-4 py-2 border border-border text-[10px] tracking-widest uppercase font-bold text-muted-foreground hover:text-foreground hover:border-primary/40 disabled:opacity-50"
+                                >
+                                  {requestingPromptId === order.orderId ? "Sending..." : "Request Payment Prompt"}
+                                </button>
+                              )}
                             </div>
 
                             {order.amountDue > 0 && (
                               <div className="flex flex-col md:flex-row gap-3">
-                                <input
-                                  type="number"
-                                  min="1"
-                                  max={order.amountDue}
-                                  step="0.01"
-                                  value={paymentAmount[order.orderId] || ""}
-                                  onChange={(e) => setPaymentAmount((prev) => ({ ...prev, [order.orderId]: e.target.value }))}
-                                  placeholder={`Enter amount up to ${order.amountDue.toFixed(2)}`}
-                                  className="flex-1 bg-background border border-border px-3 py-2 text-xs focus:outline-none focus:border-primary transition-colors"
-                                />
                                 <button
                                   onClick={() => handlePayNow(order)}
                                   disabled={payingOrderId === order.orderId}
-                                  className="px-4 py-2 bg-secondary text-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-primary hover:text-primary-foreground disabled:opacity-50"
-                                >
-                                  {payingOrderId === order.orderId ? "Processing..." : "Pay Portion"}
-                                </button>
-                                <button
-                                  onClick={() => handlePayNow(order, true)}
-                                  disabled={payingOrderId === order.orderId}
                                   className="px-4 py-2 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light disabled:opacity-50"
                                 >
-                                  Pay Full Balance
+                                  {payingOrderId === order.orderId ? "Processing..." : `Pay Remaining $${order.amountDue.toFixed(2)}`}
                                 </button>
                               </div>
                             )}
+                            {order.amountDue <= 0 && (
+                              <p className="text-xs text-emerald-500">
+                                This delivery order is fully settled and ready for admin finalization after both delivery confirmations.
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        {order.paymentMethod === "Mpesa" && order.amountDue > 0 && (
+                          <div className="space-y-3 border border-border/50 rounded p-4">
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">M-Pesa Payment</p>
+                              <p className="text-xs text-muted-foreground">
+                                Send an STK push to complete the remaining balance from your Safaricom phone.
+                              </p>
+                            </div>
+                            <div className="flex flex-col md:flex-row gap-3">
+                              <input
+                                type="tel"
+                                value={mpesaPhone[order.orderId] || order.paymentPhone || ""}
+                                onChange={(e) => setMpesaPhone((prev) => ({ ...prev, [order.orderId]: e.target.value }))}
+                                placeholder="0712345678"
+                                className="flex-1 bg-background border border-border px-3 py-2 text-xs focus:outline-none focus:border-primary transition-colors"
+                              />
+                              <button
+                                onClick={() => handleMpesaRetry(order)}
+                                disabled={requestingMpesaId === order.orderId}
+                                className="px-4 py-2 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light disabled:opacity-50"
+                              >
+                                {requestingMpesaId === order.orderId ? "Sending..." : "Send STK Push"}
+                              </button>
+                            </div>
                           </div>
                         )}
 

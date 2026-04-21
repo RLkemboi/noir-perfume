@@ -1,8 +1,9 @@
 import { motion } from "framer-motion";
 import { Crown, Sparkles, Diamond, Shield, Award, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { UserProfile } from "../../../server/types";
 
-export type UserTier = "Bronze" | "Silver" | "Gold" | "Platinum" | "Diamond" | "The Alchemist Circle";
+export type UserTier = UserProfile["tier"];
 
 interface TierBadgeProps {
   tier: UserTier;
@@ -11,6 +12,12 @@ interface TierBadgeProps {
 }
 
 const TIER_CONFIG: Record<UserTier, { color: string; icon: any; label: string; bg: string }> = {
+  Junior: {
+    color: "text-stone-400",
+    bg: "bg-stone-400/10 border-stone-400/20",
+    icon: Zap,
+    label: "Junior Member",
+  },
   Bronze: {
     color: "text-amber-700",
     bg: "bg-amber-700/10 border-amber-700/20",
