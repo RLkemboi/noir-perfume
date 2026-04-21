@@ -79,7 +79,7 @@ export default function AgentDashboard() {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
-        toast.success("Order marked as delivered! Customer awarded points.");
+        toast.success("Order marked as delivered.");
         fetchData();
       } else {
         const data = await res.json();

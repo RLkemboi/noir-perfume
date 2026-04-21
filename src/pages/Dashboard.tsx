@@ -255,7 +255,11 @@ export default function Dashboard() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Failed to send M-Pesa prompt");
       setOrders((prev) => prev.map((entry) => (entry.orderId === order.orderId ? data.order : entry)));
-      toast.success(data.mpesa?.customerMessage || "M-Pesa STK push sent.");
+      toast.success(
+        data.mpesa?.mock
+          ? data.mpesa?.customerMessage || "Sandbox payment completed successfully."
+          : data.mpesa?.customerMessage || "M-Pesa STK push sent."
+      );
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to send M-Pesa prompt");
     } finally {
@@ -394,7 +398,7 @@ export default function Dashboard() {
                 <div className="flex flex-col items-center justify-center h-full">
                   <TierBadge tier={profile.tier} className="mb-2" />
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">Current Tier</p>
-                  <p className="mt-2 text-xs text-muted-foreground">{profile.points || 0} Noir Points</p>
+                  <p className="mt-2 text-xs text-muted-foreground">{(profile.points || 0).toFixed(2)} Noir Points</p>
                 </div>
               ) : (
                 <>
@@ -677,7 +681,7 @@ export default function Dashboard() {
                             <div>
                               <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">M-Pesa Payment</p>
                               <p className="text-xs text-muted-foreground">
-                                Send an STK push to complete the remaining balance from your Safaricom phone.
+                                Sandbox mode is active. Sending this prompt will simulate a successful M-Pesa settlement until live credentials are added.
                               </p>
                             </div>
                             <div className="flex flex-col md:flex-row gap-3">

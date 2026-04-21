@@ -252,7 +252,9 @@ export default function Checkout() {
       setCompleted(true);
       setCompletionNote(
         paymentMethod === "Mpesa"
-          ? data.mpesa?.customerMessage || "Check your phone and complete the M-Pesa STK prompt to finish payment."
+          ? data.mpesa?.mock
+            ? data.mpesa?.customerMessage || "Sandbox payment completed successfully. Live credentials will replace this simulated charge later."
+            : data.mpesa?.customerMessage || "Check your phone and complete the M-Pesa STK prompt to finish payment."
           : paymentMethod === "PayOnDelivery" && usesAccountBalance
             ? `This order has been posted to your running account. Projected balance: $${projectedAccountBalance.toFixed(2)}.`
             : paymentMethod === "PayOnDelivery" && needsBronzeDeposit
@@ -263,7 +265,9 @@ export default function Checkout() {
       toast.success(`Order #${data.orderId} confirmed`, {
         description:
           paymentMethod === "Mpesa"
-            ? data.mpesa?.customerMessage || `STK push sent to ${mpesaPhone}.`
+            ? data.mpesa?.mock
+              ? data.mpesa?.customerMessage || "Sandbox payment completed."
+              : data.mpesa?.customerMessage || `STK push sent to ${mpesaPhone}.`
             : `Total: $${data.total}`,
         className: "glass-panel border-primary/20",
       });
@@ -357,12 +361,12 @@ export default function Checkout() {
                 <p className="text-xs font-bold tracking-widest uppercase text-primary">Status Updated</p>
                 <div className="flex items-center gap-2">
                   <TierBadge tier={profile.tier} />
-                  <span className="text-xs text-muted-foreground">+ {Math.floor(total)} Noir Points earned</span>
+                  <span className="text-xs text-muted-foreground">+ {(total * 0.05).toFixed(2)} Noir Points earned</span>
                 </div>
               </div>
               <div className="text-right">
                 <p className="text-[10px] text-muted-foreground uppercase font-bold">Total Points</p>
-                <p className="text-lg font-serif gold-text font-bold">{profile.points}</p>
+                <p className="text-lg font-serif gold-text font-bold">{profile.points.toFixed(2)}</p>
               </div>
             </motion.div>
           )}
@@ -793,7 +797,7 @@ export default function Checkout() {
                           className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
                         />
                         <p className="text-[10px] text-muted-foreground">
-                          The STK push will be sent to this Safaricom line and charged to your Buy Goods till setup on the server.
+                          Sandbox mode is active for now. This simulates a successful payment while live M-Pesa credentials are pending.
                         </p>
                       </div>
                     )}
