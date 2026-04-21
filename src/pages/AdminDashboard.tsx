@@ -16,8 +16,11 @@ interface FinancialWeek {
   bookedRevenue: number;
   realizedRevenue: number;
   estimatedProfit: number;
+  profit: number;
+  previousWeekProfit: number;
   netWorth: number;
   direction: "up" | "down" | "flat";
+  trendColor: "green" | "red";
 }
 
 interface FinancialSummary {
@@ -284,11 +287,35 @@ export default function AdminDashboard() {
   const maxValue = Math.max(...chartValues, 1);
   const valueRange = maxValue - minValue || 1;
   const chartPoints = weeklyTrend.map((item, index) => {
+    const isNullWeek = item.bookedRevenue === 0 && item.realizedRevenue === 0 && item.estimatedProfit === 0;
     const x = weeklyTrend.length === 1 ? 50 : (index / (weeklyTrend.length - 1)) * 100;
     const y = 100 - ((item.estimatedProfit - minValue) / valueRange) * 100;
-    return { ...item, x, y };
+    return { ...item, x, y, isNullWeek };
   });
-  const linePath = chartPoints.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+
+  const validSegments: {x1: number, y1: number, x2: number, y2: number, color: string}[] = [];
+  let linePath = "";
+  let isFirstPoint = true;
+
+  chartPoints.forEach((point, i) => {
+    if (point.isNullWeek) {
+      isFirstPoint = true;
+      return;
+    }
+    linePath += `${isFirstPoint ? "M" : "L"} ${point.x} ${point.y} `;
+    isFirstPoint = false;
+
+    if (i > 0) {
+      const prev = chartPoints[i - 1];
+      if (!prev.isNullWeek) {
+        validSegments.push({
+          x1: prev.x, y1: prev.y,
+          x2: point.x, y2: point.y,
+          color: point.trendColor === "green" ? "#22c55e" : "#ef4444"
+        });
+      }
+    }
+  });
   const formatMoney = (value?: number) => `$${Number(value ?? 0).toFixed(2)}`;
 
   return (
@@ -513,28 +540,25 @@ export default function AdminDashboard() {
                   <div className="h-72 w-full rounded border border-border/60 bg-black/10 p-4">
                     {chartPoints.length > 0 ? (
                       <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full overflow-visible">
-                        {chartPoints.slice(1).map((point, index) => {
-                          const prev = chartPoints[index];
-                          return (
-                            <line
-                              key={`${point.label}-${index}`}
-                              x1={prev.x}
-                              y1={prev.y}
-                              x2={point.x}
-                              y2={point.y}
-                              stroke={point.direction === "down" ? "#ef4444" : "#22c55e"}
-                              strokeWidth="1.5"
-                            />
-                          );
-                        })}
+                        {validSegments.map((segment, index) => (
+                          <line
+                            key={`segment-${index}`}
+                            x1={segment.x1}
+                            y1={segment.y1}
+                            x2={segment.x2}
+                            y2={segment.y2}
+                            stroke={segment.color}
+                            strokeWidth="1.5"
+                          />
+                        ))}
                         <path d={linePath} fill="none" stroke="rgba(212,175,55,0.5)" strokeWidth="0.4" />
-                        {chartPoints.map((point) => (
+                        {chartPoints.filter(p => !p.isNullWeek).map((point) => (
                           <circle
                             key={point.label}
                             cx={point.x}
                             cy={point.y}
                             r="2.1"
-                            fill={point.direction === "down" ? "#ef4444" : point.direction === "up" ? "#22c55e" : "#eab308"}
+                            fill={point.trendColor === "green" ? "#22c55e" : "#ef4444"}
                           />
                         ))}
                       </svg>

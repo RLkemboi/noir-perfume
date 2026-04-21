@@ -342,38 +342,30 @@ function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
   let cumulativeNetWorth = 0;
   let previousEstimatedProfit: number | null = null;
   const weeklyTrend = weeklyWindow.map(({ key, label }, index) => {
-      const week = weeklyMap.get(key);
-      if (!week) {
-        return {
-          label,
-          bookedRevenue: 0,
-          realizedRevenue: 0,
-          recognizedExpense: 0,
-          estimatedProfit: 0,
-          netWorth: Number(cumulativeNetWorth.toFixed(2)),
-          direction: "flat" as const,
-          trendColor: "red" as const,
-        };
-      }
-
-      week.weeklyProfit = Number((week.realizedRevenue - week.recognizedExpense).toFixed(2));
-      cumulativeNetWorth += week.weeklyProfit;
-      week.netWorth = Number(cumulativeNetWorth.toFixed(2));
-      const direction = previousEstimatedProfit == null ? "flat" : week.weeklyProfit >= previousEstimatedProfit ? "up" : "down";
-      const trendColor = index === 0 || previousEstimatedProfit == null || week.weeklyProfit <= previousEstimatedProfit ? "red" : "green";
-      previousEstimatedProfit = week.weeklyProfit;
-
-      return {
-        ...week,
-        bookedRevenue: Number(week.bookedRevenue.toFixed(2)),
-        realizedRevenue: Number(week.realizedRevenue.toFixed(2)),
-        recognizedExpense: Number(week.recognizedExpense.toFixed(2)),
-        estimatedProfit: Number(week.weeklyProfit.toFixed(2)),
-        netWorth: Number(week.netWorth.toFixed(2)),
-        direction,
-        trendColor,
-      };
-    });
+    const week = weeklyMap.get(key);
+    const currentProfit = week ? Number((week.realizedRevenue - week.recognizedExpense).toFixed(2)) : 0;
+    cumulativeNetWorth += currentProfit;
+    
+    const prevProfit = previousEstimatedProfit || 0;
+    const trendColor = currentProfit > prevProfit ? "green" : "red";
+    const direction = previousEstimatedProfit == null ? "flat" : currentProfit >= previousEstimatedProfit ? "up" : "down";
+    
+    const result = {
+      label,
+      bookedRevenue: week ? Number(week.bookedRevenue.toFixed(2)) : 0,
+      realizedRevenue: week ? Number(week.realizedRevenue.toFixed(2)) : 0,
+      recognizedExpense: week ? Number(week.recognizedExpense.toFixed(2)) : 0,
+      estimatedProfit: currentProfit,
+      profit: currentProfit,
+      previousWeekProfit: prevProfit,
+      netWorth: Number(cumulativeNetWorth.toFixed(2)),
+      direction,
+      trendColor,
+    };
+    
+    previousEstimatedProfit = currentProfit;
+    return result;
+  });
 
   return {
     totalRevenue: Number(bookedRevenue.toFixed(2)),
