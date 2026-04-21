@@ -282,40 +282,50 @@ export default function AdminDashboard() {
   const activeEmployees = staffDirectory.filter((staff) => staff.employmentStatus !== "Suspended" && staff.isApproved);
   const suspendedEmployees = staffDirectory.filter((staff) => staff.employmentStatus === "Suspended");
   const weeklyTrend = financials?.weeklyTrend ?? [];
-  const chartValues = weeklyTrend.map((item) => item.estimatedProfit);
-  const minValue = Math.min(...chartValues, 0);
-  const maxValue = Math.max(...chartValues, 1);
-  const valueRange = maxValue - minValue || 1;
-  const chartPoints = weeklyTrend.map((item, index) => {
-    const isNullWeek = item.bookedRevenue === 0 && item.realizedRevenue === 0 && item.estimatedProfit === 0;
-    const x = weeklyTrend.length === 1 ? 50 : (index / (weeklyTrend.length - 1)) * 100;
-    const y = 100 - ((item.estimatedProfit - minValue) / valueRange) * 100;
-    return { ...item, x, y, isNullWeek };
+
+  // --- Graph computation ---
+  // Only use weeks that actually have data for scale calculation
+  const activeWeeks = weeklyTrend.filter(w => w.profit > 0);
+  const profitValues = weeklyTrend.map(w => w.profit);
+  const rawMin = profitValues.length > 0 ? Math.min(...profitValues) : 0;
+  const rawMax = profitValues.length > 0 ? Math.max(...profitValues) : 1;
+  // Add 10% padding so points don't sit on the very edge
+  const graphMin = Math.min(rawMin, 0);
+  const graphMax = rawMax <= graphMin ? graphMin + 1 : rawMax;
+  const graphRange = graphMax - graphMin;
+
+  const totalPoints = weeklyTrend.length;
+  const chartPoints = weeklyTrend.map((week, i) => {
+    const x = totalPoints <= 1 ? 50 : (i / (totalPoints - 1)) * 96 + 2; // 2–98 to add padding
+    const isNull = week.profit === 0 && week.previousWeekProfit === 0 && week.bookedRevenue === 0;
+    const y = isNull ? null : 90 - ((week.profit - graphMin) / graphRange) * 80; // 10–90 vertical range
+    const dotColor = week.trendColor === "green" ? "#22c55e" : "#ef4444";
+    return { ...week, x, y, isNull, dotColor };
   });
 
-  const validSegments: {x1: number, y1: number, x2: number, y2: number, color: string}[] = [];
-  let linePath = "";
-  let isFirstPoint = true;
-
-  chartPoints.forEach((point, i) => {
-    if (point.isNullWeek) {
-      isFirstPoint = true;
+  // Build separate path segments that break on null weeks
+  const pathSegments: string[] = [];
+  let currentPath = "";
+  chartPoints.forEach(point => {
+    if (point.isNull || point.y === null) {
+      if (currentPath) { pathSegments.push(currentPath); currentPath = ""; }
       return;
     }
-    linePath += `${isFirstPoint ? "M" : "L"} ${point.x} ${point.y} `;
-    isFirstPoint = false;
-
-    if (i > 0) {
-      const prev = chartPoints[i - 1];
-      if (!prev.isNullWeek) {
-        validSegments.push({
-          x1: prev.x, y1: prev.y,
-          x2: point.x, y2: point.y,
-          color: point.trendColor === "green" ? "#22c55e" : "#ef4444"
-        });
-      }
-    }
+    currentPath += `${currentPath === "" ? "M" : " L"} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
   });
+  if (currentPath) pathSegments.push(currentPath);
+
+  // Build colored line segments between adjacent real points
+  const lineSegments: { x1: number; y1: number; x2: number; y2: number; color: string }[] = [];
+  for (let i = 1; i < chartPoints.length; i++) {
+    const prev = chartPoints[i - 1];
+    const curr = chartPoints[i];
+    if (!prev.isNull && prev.y !== null && !curr.isNull && curr.y !== null) {
+      lineSegments.push({ x1: prev.x, y1: prev.y, x2: curr.x, y2: curr.y, color: curr.dotColor });
+    }
+  }
+
+  const hasData = activeWeeks.length > 0;
   const formatMoney = (value?: number) => `$${Number(value ?? 0).toFixed(2)}`;
 
   return (
@@ -537,42 +547,70 @@ export default function AdminDashboard() {
                     </div>
                   </div>
 
-                  <div className="h-72 w-full rounded border border-border/60 bg-black/10 p-4">
-                    {chartPoints.length > 0 ? (
-                      <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="w-full h-full overflow-visible">
-                        {validSegments.map((segment, index) => (
+                  <div className="h-72 w-full rounded border border-border/60 bg-black/10 p-2">
+                    {!hasData ? (
+                      <div className="h-full flex items-center justify-center text-sm text-muted-foreground italic font-serif">
+                        No weekly data yet — place some orders to see your profit graph.
+                      </div>
+                    ) : (
+                      <svg viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" className="w-full h-full">
+                        {/* Horizontal baseline */}
+                        <line x1="0" y1="90" x2="100" y2="90" stroke="rgba(255,255,255,0.06)" strokeWidth="0.3" />
+                        <line x1="0" y1="50" x2="100" y2="50" stroke="rgba(255,255,255,0.04)" strokeWidth="0.3" />
+                        {/* Trend line segments — colored by direction */}
+                        {lineSegments.map((seg, i) => (
                           <line
-                            key={`segment-${index}`}
-                            x1={segment.x1}
-                            y1={segment.y1}
-                            x2={segment.x2}
-                            y2={segment.y2}
-                            stroke={segment.color}
+                            key={`seg-${i}`}
+                            x1={seg.x1} y1={seg.y1}
+                            x2={seg.x2} y2={seg.y2}
+                            stroke={seg.color}
                             strokeWidth="1.5"
+                            strokeLinecap="round"
                           />
                         ))}
-                        <path d={linePath} fill="none" stroke="rgba(212,175,55,0.5)" strokeWidth="0.4" />
-                        {chartPoints.filter(p => !p.isNullWeek).map((point) => (
-                          <circle
-                            key={point.label}
-                            cx={point.x}
-                            cy={point.y}
-                            r="2.1"
-                            fill={point.trendColor === "green" ? "#22c55e" : "#ef4444"}
-                          />
+                        {/* Gold ghost path overlay */}
+                        {pathSegments.map((d, i) => (
+                          <path key={`path-${i}`} d={d} fill="none" stroke="rgba(212,175,55,0.25)" strokeWidth="0.5" strokeLinejoin="round" />
+                        ))}
+                        {/* Data point dots */}
+                        {chartPoints.filter(p => !p.isNull && p.y !== null).map((point) => (
+                          <g key={point.label}>
+                            <circle cx={point.x} cy={point.y!} r="2.5" fill={point.dotColor} opacity="0.9" />
+                            <circle cx={point.x} cy={point.y!} r="4" fill={point.dotColor} opacity="0.15" />
+                          </g>
+                        ))}
+                        {/* X-axis labels */}
+                        {chartPoints.map((point) => (
+                          <text
+                            key={`label-${point.label}`}
+                            x={point.x}
+                            y="98"
+                            textAnchor="middle"
+                            fontSize="2.8"
+                            fill="rgba(255,255,255,0.3)"
+                          >
+                            {point.label}
+                          </text>
                         ))}
                       </svg>
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-sm text-muted-foreground">No weekly financial trend yet.</div>
                     )}
                   </div>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {weeklyTrend.map((week) => (
-                      <div key={week.label} className={`rounded border px-3 py-3 ${week.direction === "down" ? "border-red-500/20 bg-red-500/5" : week.direction === "up" ? "border-emerald-500/20 bg-emerald-500/5" : "border-yellow-500/20 bg-yellow-500/5"}`}>
+                      <div
+                        key={week.label}
+                        className={`rounded border px-3 py-3 ${
+                          week.trendColor === "green"
+                            ? "border-emerald-500/20 bg-emerald-500/5"
+                            : week.profit === 0
+                              ? "border-border/30 bg-black/10"
+                              : "border-red-500/20 bg-red-500/5"
+                        }`}
+                      >
                         <p className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">{week.label}</p>
-                        <p className="font-serif font-bold">{formatMoney(week.estimatedProfit)}</p>
-                        <p className="text-[10px] text-muted-foreground">Net worth {formatMoney(week.netWorth)}</p>
+                        <p className="font-serif font-bold">{formatMoney(week.profit)}</p>
+                        <p className="text-[10px] text-muted-foreground">Net {formatMoney(week.netWorth)}</p>
                       </div>
                     ))}
                   </div>
