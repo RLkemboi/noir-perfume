@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Shield, UserCheck, UserX, Clock, Mail, ShieldAlert, 
   Package, TrendingUp, Users, ChevronDown, ArrowLeft,
-  LayoutDashboard, LogOut, DollarSign, Wallet, Receipt, CreditCard, Star
+  LayoutDashboard, LogOut, DollarSign, Wallet, Receipt, CreditCard, Star, Activity
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
@@ -83,7 +83,7 @@ export default function AdminDashboard() {
   const { profile, getIdToken, logout } = useAuth();
   const navigate = useNavigate();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "finance" | "orders" | "staff">("overview");
+  const [activeTab, setActiveTab] = useState<"overview" | "finance" | "orders" | "staff" | "logs">("overview");
   
   // Staff State
   const [pendingStaff, setPendingStaff] = useState<UserProfile[]>([]);
@@ -97,6 +97,9 @@ export default function AdminDashboard() {
   const [updatingOrderId, setUpdatingOrderId] = useState<number | null>(null);
   const [financials, setFinancials] = useState<FinancialSummary | null>(null);
 
+  // System Logs State
+  const [systemLogs, setSystemLogs] = useState<{id: string, timestamp: string, level: string, message: string, source: string}[]>([]);
+
   // Fetch Data
   const fetchData = useCallback(async () => {
     if (profile?.role !== "Admin") return;
@@ -106,11 +109,12 @@ export default function AdminDashboard() {
     
     try {
       const token = await getIdToken();
-      const [staffRes, staffDirectoryRes, ordersRes, financialRes] = await Promise.all([
+      const [staffRes, staffDirectoryRes, ordersRes, financialRes, logsRes] = await Promise.all([
         fetch("/api/admin/pending-staff", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/admin/staff", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/admin/orders", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("/api/admin/financials", { headers: { Authorization: `Bearer ${token}` } })
+        fetch("/api/admin/financials", { headers: { Authorization: `Bearer ${token}` } }),
+        fetch("/api/admin/system-logs", { headers: { Authorization: `Bearer ${token}` } })
       ]);
       
       if (staffRes.ok) {
@@ -128,6 +132,10 @@ export default function AdminDashboard() {
       if (financialRes.ok) {
         const data = await financialRes.json();
         setFinancials(data);
+      }
+      if (logsRes.ok) {
+        const data = await logsRes.json();
+        setSystemLogs(data.logs);
       }
     } catch {
       toast.error("Failed to load admin data");
@@ -350,6 +358,18 @@ export default function AdminDashboard() {
               </span>
             )}
             {activeTab === "staff" && <motion.div layoutId="tab-indicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
+          </button>
+          <button 
+            onClick={() => setActiveTab("logs")}
+            className={`pb-4 text-xs tracking-widest uppercase font-bold transition-all relative flex items-center gap-2 ${activeTab === "logs" ? "text-primary" : "text-muted-foreground hover:text-foreground"}`}
+          >
+            <span className="flex items-center gap-2"><Activity className="w-4 h-4" /> System Logs</span>
+            {systemLogs.filter(l => l.level === "error" || l.level === "critical").length > 0 && (
+              <span className="w-4 h-4 bg-red-500 text-white text-[8px] rounded-full flex items-center justify-center">
+                {systemLogs.filter(l => l.level === "error" || l.level === "critical").length}
+              </span>
+            )}
+            {activeTab === "logs" && <motion.div layoutId="tab-indicator" className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
           </button>
         </div>
 
@@ -922,6 +942,76 @@ export default function AdminDashboard() {
                   </div>
                 </>
               )}
+            </motion.div>
+          )}
+          {/* LOGS TAB */}
+          {activeTab === "logs" && (
+            <motion.div 
+              key="logs"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-6"
+            >
+              <div className="glass-panel p-6 overflow-hidden">
+                <div className="flex items-center justify-between mb-6">
+                  <div>
+                    <h3 className="text-sm font-bold tracking-widest uppercase text-primary">System Logs</h3>
+                    <p className="text-xs text-muted-foreground">Monitor critical system events and database connection statuses.</p>
+                  </div>
+                  <button onClick={fetchData} className="px-4 py-2 bg-primary/10 text-primary text-[10px] tracking-widest uppercase font-bold hover:bg-primary/20 transition-all">
+                    Refresh Logs
+                  </button>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="border-b border-border bg-black/20">
+                        <th className="px-6 py-4 text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Time</th>
+                        <th className="px-6 py-4 text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Severity</th>
+                        <th className="px-6 py-4 text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Source</th>
+                        <th className="px-6 py-4 text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Message</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {systemLogs.length === 0 ? (
+                        <tr>
+                          <td colSpan={4} className="px-6 py-12 text-center text-muted-foreground italic font-serif">
+                            No system logs recorded.
+                          </td>
+                        </tr>
+                      ) : (
+                        systemLogs.map((log) => (
+                          <tr key={log.id} className="hover:bg-primary/5 transition-colors">
+                            <td className="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
+                              {new Date(log.timestamp).toLocaleString()}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`inline-flex px-3 py-1 rounded-full border text-[10px] tracking-widest uppercase font-bold ${
+                                log.level === "error" || log.level === "critical" 
+                                  ? "text-red-500 border-red-500/20 bg-red-500/5"
+                                  : log.level === "warning"
+                                    ? "text-yellow-500 border-yellow-500/20 bg-yellow-500/5"
+                                    : "text-emerald-500 border-emerald-500/20 bg-emerald-500/5"
+                              }`}>
+                                <Terminal className="w-3 h-3 inline-block mr-1" />
+                                {log.level}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 font-mono text-xs font-bold text-primary">
+                              {log.source}
+                            </td>
+                            <td className="px-6 py-4 text-xs font-mono text-muted-foreground">
+                              {log.message}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

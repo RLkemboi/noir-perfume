@@ -94,7 +94,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (res.ok) {
         const data = await res.json();
         setProfile(data.profile);
+        return;
       }
+
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        console.warn("[Auth] Server rejected the current session. Clearing local auth state.");
+        await signOut(auth);
+        setUser(null);
+        setProfile(null);
+        return;
+      }
+      console.error("Error fetching profile:", data.message || `Request failed with ${res.status}`);
     } catch (err) {
       console.error("Error fetching profile:", err);
     }

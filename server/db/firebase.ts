@@ -1,10 +1,11 @@
 import { initializeApp, cert, type ServiceAccount, type App } from "firebase-admin/app";
 import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getAuth, type Auth } from "firebase-admin/auth";
+import { addSystemLog } from "./logs.js";
 
-const projectId = process.env.FIREBASE_PROJECT_ID;
-const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
-const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const projectId = process.env.FIREBASE_PROJECT_ID?.replace(/^["'](.+)["']$/, "$1");
+const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/^["'](.+)["']$/, "$1")?.replace(/\\n/g, "\n");
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL?.replace(/^["'](.+)["']$/, "$1");
 
 let db: Firestore | undefined;
 let app: App | undefined;
@@ -30,9 +31,14 @@ if (looksReal) {
     auth = getAuth(app);
     firestoreAvailable = true;
     console.log("[Firebase] Connected to Firestore.")
+    addSystemLog("info", "Firebase", "Successfully connected to Firestore.");
   } catch (err) {
-    console.warn("[Firebase] Failed to initialize:", err instanceof Error ? err.message : err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn("[Firebase] Failed to initialize:", msg);
+    addSystemLog("critical", "FirebaseInit", `Failed to initialize: ${msg}`);
   }
+} else {
+  addSystemLog("warning", "FirebaseInit", "Firebase credentials missing or invalid format. Using in-memory fallback.");
 }
 
 if (!db) {
@@ -42,25 +48,13 @@ if (!db) {
   );
 }
 
-function isFirestoreConnectionError(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false;
-  const code = "code" in err ? (err as { code?: unknown }).code : undefined;
-  const message = err instanceof Error ? err.message : String(err);
-  return (
-    code === 14 ||
-    message.includes("UNAVAILABLE") ||
-    message.includes("ECONNRESET") ||
-    message.includes("No connection established")
-  );
-}
-
 function disableFirestore(err: unknown): boolean {
-  if (!isFirestoreConnectionError(err)) return false;
   firestoreAvailable = false;
   if (!loggedFirestoreFallback) {
     loggedFirestoreFallback = true;
     const reason = err instanceof Error ? err.message : String(err);
     console.warn(`[Firebase] Firestore unavailable. Switching to in-memory fallback for this session. ${reason}`);
+    addSystemLog("error", "FirestoreFallback", `Firestore error occurred, falling back to memory: ${reason}`);
   }
   return true;
 }

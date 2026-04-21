@@ -38,17 +38,29 @@ export default function Dashboard() {
 
   useEffect(() => {
     const loadOrders = async () => {
+      if (authLoading) return;
       try {
         if (user) {
           const token = await getIdToken();
+          if (!token) {
+            setOrders([]);
+            setLoading(false);
+            return;
+          }
           const res = await fetch("/api/orders/me", {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
+            headers: { Authorization: `Bearer ${token}` },
           });
           if (res.ok) {
             const data = await res.json();
             setOrders(data.orders || []);
           } else {
             const data = await res.json().catch(() => ({}));
+            if (res.status === 401) {
+              await logout();
+              navigate("/login");
+              toast.error("Your session expired. Sign in again.");
+              return;
+            }
             toast.error(data.message || "Failed to load orders");
           }
         } else if (isGuest) {
@@ -68,7 +80,7 @@ export default function Dashboard() {
       }
     };
     loadOrders();
-  }, [user, isGuest, getIdToken, sessionId]);
+  }, [authLoading, user, isGuest, getIdToken, sessionId, logout, navigate]);
 
   const handleLogout = async () => {
     try {

@@ -13,6 +13,7 @@ export interface MpesaStkResult {
   customerMessage: string;
   responseDescription: string;
   mock: boolean;
+  receiptNumber?: string;
 }
 
 function getEnvironment(): MpesaEnvironment {
@@ -81,17 +82,18 @@ export async function initiateMpesaStkPush(payload: MpesaStkPayload): Promise<Mp
   const config = getConfig();
   const phoneNumber = normalizeMpesaPhone(payload.phoneNumber);
 
-  if (!isConfigured()) {
-    if (!config.mockEnabled) {
+  if (getEnvironment() === "sandbox" || !isConfigured()) {
+    if (!config.mockEnabled && !isConfigured()) {
       throw new Error("M-Pesa is not configured. Set MPESA credentials and callback URL on the server.");
     }
 
     return {
       merchantRequestId: `mock-merchant-${Date.now()}`,
       checkoutRequestId: `mock-checkout-${Date.now()}`,
-      customerMessage: "Mock STK push created. Add real M-Pesa credentials to go live.",
-      responseDescription: "Mock STK request accepted",
+      customerMessage: "Sandbox payment completed successfully. Live credentials will replace this simulated charge later.",
+      responseDescription: "Mock STK request accepted and auto-settled",
       mock: true,
+      receiptNumber: `MOCK-${Date.now()}`,
     };
   }
 

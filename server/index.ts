@@ -32,7 +32,8 @@ import {
 } from "./db/orders.js";
 import { adjustUserAccountBalance, getUserProfile, updateUserSpent, getPendingStaff, approveStaff, registerStaffApplication, getStaffMembers, updateStaffProfile } from "./db/users.js";
 import { auth } from "./db/firebase.js";
-import { initiateMpesaStkPush, normalizeMpesaPhone } from "./mpesa.ts";
+import { getSystemLogs } from "./db/logs.js";
+import { initiateMpesaStkPush, normalizeMpesaPhone } from "./mpesa.js";
 
 const app = new Hono();
 
@@ -40,8 +41,12 @@ app.onError((err, c) => {
   if (err instanceof HTTPException) {
     return c.json({ message: err.message }, err.status);
   }
-  console.error("[Server Error]", err);
-  return c.json({ message: "Internal server error" }, 500);
+  console.error("[Server Error Detail]", {
+    message: err.message,
+    stack: err.stack,
+    cause: err.cause,
+  });
+  return c.json({ message: "Internal server error", detail: err.message }, 500);
 });
 
 app.use("*", async (c, next) => {
@@ -71,13 +76,20 @@ app.get("/api/products/:id", (c) => {
   return c.json({ product });
 });
 
-function parsePrice(price: string): number {
+function parsePrice(price: any): number {
+  if (typeof price !== "string") return 0;
   return Number(price.replace(/[^0-9.]/g, "")) || 0;
 }
 
-function getCartTotals(items: CartItem[]) {
-  const count = items.reduce((sum, i) => sum + i.quantity, 0);
-  const total = items.reduce((sum, i) => sum + parsePrice(i.price) * i.quantity, 0);
+function getCartTotals(items: CartItem[] = []) {
+  if (!Array.isArray(items)) {
+    return { count: 0, total: 0 };
+  }
+  const count = items.reduce((sum, i) => sum + (Number(i?.quantity) || 0), 0);
+  const total = items.reduce((sum, i) => {
+    const price = typeof i?.price === "string" ? parsePrice(i.price) : 0;
+    return sum + price * (Number(i?.quantity) || 0);
+  }, 0);
   return { count, total: Number(total.toFixed(2)) };
 }
 
@@ -92,6 +104,38 @@ async function getAuthenticatedUser(c: Context) {
   try {
     return await auth.verifyIdToken(token);
   } catch {
+    throw new HTTPException(401, { message: "Invalid token" });
+  }
+}
+
+function isAuthConfigurationMismatch(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message.includes("incorrect \"aud\"") ||
+    message.includes("incorrect \"iss\"") ||
+    message.includes("Firebase ID token has invalid signature") ||
+    message.includes("Firebase project")
+  );
+}
+
+async function verifyAuthToken(token: string) {
+  if (!token) {
+    throw new HTTPException(401, { message: "Unauthorized" });
+  }
+
+  if (!auth) {
+    throw new HTTPException(503, { message: "Auth service unavailable" });
+  }
+
+  try {
+    return await auth.verifyIdToken(token);
+  } catch (err) {
+    console.error("[Auth] Token verification failed:", err);
+    if (isAuthConfigurationMismatch(err)) {
+      throw new HTTPException(503, {
+        message: "Authentication configuration mismatch between client and server. Rebuild the frontend with the correct Firebase web config and redeploy.",
+      });
+    }
     throw new HTTPException(401, { message: "Invalid token" });
   }
 }
@@ -152,15 +196,16 @@ function getShippedAt(order: Order): string | undefined {
 
 function getOrderFinancials(order: Order) {
   const recognizedExpense = Number(
-    order.items
+    (order.items || [])
       .reduce((sum, item) => {
         const product = products.find((p) => p.id === item.productId);
         const unitPrice = parsePrice(item.price);
-        return sum + unitPrice * estimateCogsRatio(product?.collection) * item.quantity;
+        const qty = Number(item.quantity) || 0;
+        return sum + unitPrice * estimateCogsRatio(product?.collection) * qty;
       }, 0)
       .toFixed(2)
   );
-
+...
   const isCancelled = order.status === "Cancelled";
   const isDelivered = order.status === "Delivered";
   const isExpenseRecognized = Boolean(getShippedAt(order));
@@ -181,6 +226,27 @@ function getOrderFinancials(order: Order) {
 
 function getCancellationMessage(order: Order) {
   return order.cancellationMessage || "Your order was cancelled. Any pending charges were voided and further payment is disabled.";
+}
+
+async function settleMockMpesaPayment(order: Order, phoneNumber: string, receiptNumber: string) {
+  const amountToSettle = Number(order.amountDue.toFixed(2));
+  const updated = await recordOrderPayment(order.orderId, amountToSettle, "mpesa_stk");
+  if (updated) {
+    await updateOrderPaymentMeta(order.orderId, {
+      paymentPhone: phoneNumber,
+      paymentReference: receiptNumber,
+      mpesaReceiptNumber: receiptNumber,
+      paymentLastError: undefined,
+      mpesaMerchantRequestId: updated.mpesaMerchantRequestId,
+      mpesaCheckoutRequestId: updated.mpesaCheckoutRequestId,
+    });
+  }
+
+  if (order.userId && amountToSettle > 0) {
+    await updateUserSpent(order.userId, amountToSettle);
+  }
+
+  return updated;
 }
 
 function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
@@ -577,12 +643,18 @@ app.post("/api/checkout", async (c) => {
         mpesaMerchantRequestId: stk.merchantRequestId,
         mpesaCheckoutRequestId: stk.checkoutRequestId,
       });
+
+      let settledOrder = order;
+      if (stk.mock && order.amountDue > 0) {
+        settledOrder = (await settleMockMpesaPayment(order, normalizedPaymentPhone, stk.receiptNumber || `MOCK-${order.orderId}`)) || order;
+      }
       await deleteCart(sessionId);
 
       return c.json({
         success: true,
         orderId: order.orderId,
         total: order.total,
+        order: settledOrder,
         mpesa: {
           checkoutRequestId: stk.checkoutRequestId,
           customerMessage: stk.customerMessage,
@@ -615,24 +687,18 @@ app.post("/api/checkout", async (c) => {
   return c.json({ success: true, orderId: order.orderId, total: order.total });
   });
 
-  app.get("/api/user/profile", async (c) => {
+app.get("/api/user/profile", async (c) => {
   const authHeader = c.req.header("Authorization") || "";
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
 
-  if (!token) {
-    throw new HTTPException(401, { message: "Unauthorized" });
-  }
-
-  if (!auth) {
-    throw new HTTPException(503, { message: "Auth service unavailable" });
-  }
-
   try {
-    const decoded = await auth.verifyIdToken(token);
+    const decoded = await verifyAuthToken(token);
     const profile = await getUserProfile(decoded.uid, decoded.email);
     return c.json({ profile });
-  } catch {
-    throw new HTTPException(401, { message: "Invalid token" });
+  } catch (err) {
+    if (err instanceof HTTPException) throw err;
+    console.error("[API] Failed to load user profile:", err);
+    throw new HTTPException(500, { message: "Unable to load your profile right now." });
   }
   });
 
@@ -833,9 +899,14 @@ app.post("/api/checkout", async (c) => {
         mpesaCheckoutRequestId: stk.checkoutRequestId,
       });
 
+      let responseOrder = updated;
+      if (stk.mock && order.amountDue > 0) {
+        responseOrder = (await settleMockMpesaPayment(order, normalizedPhone, stk.receiptNumber || `MOCK-${order.orderId}`)) || updated;
+      }
+
       return c.json({
         success: true,
-        order: updated,
+        order: responseOrder,
         mpesa: {
           checkoutRequestId: stk.checkoutRequestId,
           customerMessage: stk.customerMessage,
@@ -1051,6 +1122,24 @@ app.post("/api/checkout", async (c) => {
   } catch {
     throw new HTTPException(401, { message: "Invalid token" });
   }
+  });
+
+  // Admin: Get system logs
+  app.get("/api/admin/system-logs", async (c) => {
+    const authHeader = c.req.header("Authorization") || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    if (!token || !auth) throw new HTTPException(401, { message: "Unauthorized" });
+
+    try {
+      const decoded = await auth.verifyIdToken(token);
+      const profile = await getUserProfile(decoded.uid, decoded.email);
+      if (profile?.role !== "Admin") throw new HTTPException(403, { message: "Admin only" });
+
+      return c.json({ logs: getSystemLogs() });
+    } catch (err) {
+      if (err instanceof HTTPException) throw err;
+      throw new HTTPException(401, { message: "Invalid token" });
+    }
   });
 
   // Admin: Get pending staff applications
@@ -1326,26 +1415,14 @@ app.post("/api/checkout", async (c) => {
 
 app.get("/api/orders/me", async (c) => {
   const authHeader = c.req.header("Authorization");
-
-  if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    throw new HTTPException(401, { message: "Unauthorized" });
-  }
-
-  const idToken = authHeader.slice(7);
-  let decoded;
   try {
-    if (!auth) {
-      throw new HTTPException(503, { message: "Auth service unavailable" });
-    }
-    decoded = await auth.verifyIdToken(idToken);
-  } catch {
-    throw new HTTPException(401, { message: "Invalid token" });
-  }
-
-  try {
+    const idToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    const decoded = await verifyAuthToken(idToken);
     const orders = await getOrdersByUser(decoded.uid);
     return c.json({ orders, count: orders.length });
-  } catch {
+  } catch (err) {
+    if (err instanceof HTTPException) throw err;
+    console.error("[API] Failed to load authenticated orders:", err);
     throw new HTTPException(500, { message: "Unable to load orders. Please try again later." });
   }
 });
