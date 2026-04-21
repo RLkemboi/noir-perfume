@@ -205,7 +205,6 @@ function getOrderFinancials(order: Order) {
       }, 0)
       .toFixed(2)
   );
-...
   const isCancelled = order.status === "Cancelled";
   const isDelivered = order.status === "Delivered";
   const isExpenseRecognized = Boolean(getShippedAt(order));

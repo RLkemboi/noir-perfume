@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   Shield, UserCheck, UserX, Clock, Mail, ShieldAlert, 
   Package, TrendingUp, Users, ChevronDown, ArrowLeft,
-  LayoutDashboard, LogOut, DollarSign, Wallet, Receipt, CreditCard, Star, Activity
+  LayoutDashboard, LogOut, DollarSign, Wallet, Receipt, CreditCard, Star, Activity, Terminal
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
