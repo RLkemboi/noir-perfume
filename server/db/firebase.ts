@@ -9,6 +9,8 @@ const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
 let db: Firestore | undefined;
 let app: App | undefined;
 let auth: Auth | undefined;
+let firestoreAvailable = false;
+let loggedFirestoreFallback = false;
 
 const looksReal =
   projectId &&
@@ -26,6 +28,7 @@ if (looksReal) {
     db = getFirestore(app);
     db.settings({ ignoreUndefinedProperties: true });
     auth = getAuth(app);
+    firestoreAvailable = true;
     console.log("[Firebase] Connected to Firestore.")
   } catch (err) {
     console.warn("[Firebase] Failed to initialize:", err instanceof Error ? err.message : err);
@@ -39,4 +42,31 @@ if (!db) {
   );
 }
 
-export { db, app, auth };
+function isFirestoreConnectionError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const code = "code" in err ? (err as { code?: unknown }).code : undefined;
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    code === 14 ||
+    message.includes("UNAVAILABLE") ||
+    message.includes("ECONNRESET") ||
+    message.includes("No connection established")
+  );
+}
+
+function disableFirestore(err: unknown): boolean {
+  if (!isFirestoreConnectionError(err)) return false;
+  firestoreAvailable = false;
+  if (!loggedFirestoreFallback) {
+    loggedFirestoreFallback = true;
+    const reason = err instanceof Error ? err.message : String(err);
+    console.warn(`[Firebase] Firestore unavailable. Switching to in-memory fallback for this session. ${reason}`);
+  }
+  return true;
+}
+
+function canUseFirestore(): boolean {
+  return Boolean(db) && firestoreAvailable;
+}
+
+export { db, app, auth, canUseFirestore, disableFirestore };

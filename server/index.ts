@@ -32,7 +32,7 @@ import {
 } from "./db/orders.js";
 import { adjustUserAccountBalance, getUserProfile, updateUserSpent, getPendingStaff, approveStaff, registerStaffApplication, getStaffMembers, updateStaffProfile } from "./db/users.js";
 import { auth } from "./db/firebase.js";
-import { initiateMpesaStkPush, normalizeMpesaPhone } from "./mpesa.js";
+import { initiateMpesaStkPush, normalizeMpesaPhone } from "./mpesa.ts";
 
 const app = new Hono();
 

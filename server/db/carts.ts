@@ -1,37 +1,60 @@
-import { db } from "./firebase.js";
+import { db, canUseFirestore, disableFirestore } from "./firebase.js";
 import type { CartItem } from "../types.js";
 
 const memoryCarts = new Map<string, CartItem[]>();
 const cartsCollection = db?.collection("carts");
 
-export async function getCart(sessionId: string): Promise<CartItem[]> {
-  if (!cartsCollection) {
-    return memoryCarts.get(sessionId) || [];
+async function withCartFallback<T>(action: () => Promise<T>, fallback: () => T | Promise<T>): Promise<T> {
+  if (!cartsCollection || !canUseFirestore()) {
+    return await fallback();
   }
-  const doc = await cartsCollection.doc(sessionId).get();
-  if (!doc.exists) return [];
-  return (doc.data()?.items as CartItem[]) || [];
+
+  try {
+    return await action();
+  } catch (err) {
+    if (disableFirestore(err)) {
+      return await fallback();
+    }
+    throw err;
+  }
+}
+
+export async function getCart(sessionId: string): Promise<CartItem[]> {
+  return withCartFallback(
+    async () => {
+      const doc = await cartsCollection!.doc(sessionId).get();
+      if (!doc.exists) return [];
+      return (doc.data()?.items as CartItem[]) || [];
+    },
+    () => memoryCarts.get(sessionId) || []
+  );
 }
 
 export async function setCart(sessionId: string, items: CartItem[]): Promise<void> {
-  if (!cartsCollection) {
-    if (items.length === 0) {
-      memoryCarts.delete(sessionId);
-    } else {
-      memoryCarts.set(sessionId, items);
+  await withCartFallback(
+    async () => {
+      await cartsCollection!.doc(sessionId).set({
+        items,
+        updatedAt: new Date().toISOString(),
+      });
+    },
+    () => {
+      if (items.length === 0) {
+        memoryCarts.delete(sessionId);
+      } else {
+        memoryCarts.set(sessionId, items);
+      }
     }
-    return;
-  }
-  await cartsCollection.doc(sessionId).set({
-    items,
-    updatedAt: new Date().toISOString(),
-  });
+  );
 }
 
 export async function deleteCart(sessionId: string): Promise<void> {
-  if (!cartsCollection) {
-    memoryCarts.delete(sessionId);
-    return;
-  }
-  await cartsCollection.doc(sessionId).delete();
+  await withCartFallback(
+    async () => {
+      await cartsCollection!.doc(sessionId).delete();
+    },
+    () => {
+      memoryCarts.delete(sessionId);
+    }
+  );
 }
