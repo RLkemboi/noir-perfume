@@ -15,7 +15,7 @@ const Header = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { totalItems, setIsOpen } = useCart();
-  const { user, isGuest } = useAuth();
+  const { user, isGuest, profile } = useAuth();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-header">
@@ -61,8 +61,8 @@ const Header = () => {
             aria-label={user ? "My account" : isGuest ? "Guest session" : "Sign in"}
           >
             <User className="w-5 h-5" />
-            {useAuth().profile && (
-              <TierBadge tier={useAuth().profile!.tier} className="scale-75 origin-right hidden md:flex" showIcon={false} />
+            {profile && (
+              <TierBadge tier={profile.tier} className="scale-75 origin-right hidden md:flex" showIcon={false} />
             )}
             {isGuest && (
               <span className="text-[10px] tracking-widest uppercase font-bold text-primary/70">Guest</span>

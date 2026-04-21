@@ -49,7 +49,7 @@ function normalizeOrder(order: Order): Order {
     paymentStatus,
     amountPaid,
     amountDue,
-    paymentPromptCount: order.paymentPromptCount ?? (paymentMethod === "PayOnDelivery" ? 1 : 0),
+    paymentPromptCount: order.paymentPromptCount ?? 0,
     paymentHistory:
       order.paymentHistory ??
       (paymentMethod === "Card"
@@ -81,7 +81,7 @@ function createMemoryOrder(
   const initialPaymentHistory: PaymentEntry[] = options.initialPaymentHistory ?? (
     initialAmountPaid > 0 ? [{ amount: initialAmountPaid, date: now, source: "checkout" }] : []
   );
-  const initialPromptCount = options.paymentPromptCount ?? (paymentMethod === "PayOnDelivery" ? 1 : 0);
+  const initialPromptCount = options.paymentPromptCount ?? 0;
   const initialPaymentStatus = options.initialPaymentStatus ?? (
     initialAmountPaid >= total ? "Paid" : initialAmountPaid > 0 ? "Partial" : "Unpaid"
   );
@@ -107,7 +107,7 @@ function createMemoryOrder(
     paymentReference: options.paymentReference,
     paymentProvider: paymentMethod === "Mpesa" ? "Mpesa" : paymentMethod === "PayOnDelivery" ? "PayOnDelivery" : "Card",
     paymentRequestedAt: paymentMethod === "Mpesa" ? now : undefined,
-    paymentPromptRequestedAt: options.paymentPromptRequestedAt ?? (paymentMethod === "PayOnDelivery" ? now : undefined),
+    paymentPromptRequestedAt: options.paymentPromptRequestedAt,
     paymentPromptCount: initialPromptCount,
     paymentHistory: initialPaymentHistory,
     customerDeliveryConfirmed: false,
@@ -144,7 +144,7 @@ export async function createOrder(
       const initialPaymentHistory: PaymentEntry[] = options.initialPaymentHistory ?? (
         initialAmountPaid > 0 ? [{ amount: initialAmountPaid, date: now, source: "checkout" }] : []
       );
-      const initialPromptCount = options.paymentPromptCount ?? (paymentMethod === "PayOnDelivery" ? 1 : 0);
+      const initialPromptCount = options.paymentPromptCount ?? 0;
       const initialPaymentStatus = options.initialPaymentStatus ?? (
         initialAmountPaid >= total ? "Paid" : initialAmountPaid > 0 ? "Partial" : "Unpaid"
       );
@@ -177,7 +177,7 @@ export async function createOrder(
         paymentReference: options.paymentReference,
         paymentProvider: paymentMethod === "Mpesa" ? "Mpesa" : paymentMethod === "PayOnDelivery" ? "PayOnDelivery" : "Card",
         paymentRequestedAt: paymentMethod === "Mpesa" ? now : undefined,
-        paymentPromptRequestedAt: options.paymentPromptRequestedAt ?? (paymentMethod === "PayOnDelivery" ? now : undefined),
+        paymentPromptRequestedAt: options.paymentPromptRequestedAt,
         paymentPromptCount: initialPromptCount,
         paymentHistory: initialPaymentHistory,
         customerDeliveryConfirmed: false,
