@@ -24,6 +24,7 @@ import {
   confirmAgentDelivery,
   confirmCustomerDelivery,
   confirmAdminDelivery,
+  cancelOrder,
   getOrderByMpesaCheckoutRequestId,
   requestPaymentPrompt,
   recordOrderPayment,
@@ -176,6 +177,10 @@ function getOrderFinancials(order: Order) {
     realizedRevenue,
     isExpenseRecognized,
   };
+}
+
+function getCancellationMessage(order: Order) {
+  return order.cancellationMessage || "Your order was cancelled. Any pending charges were voided and further payment is disabled.";
 }
 
 function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
@@ -711,6 +716,9 @@ app.post("/api/checkout", async (c) => {
     const orderId = Number(c.req.param("orderId"));
     const order = await getOrderById(orderId);
     if (!order) throw new HTTPException(404, { message: "Order not found" });
+    if (order.status === "Cancelled") {
+      throw new HTTPException(400, { message: getCancellationMessage(order) });
+    }
     if (order.paymentMethod !== "PayOnDelivery") {
       throw new HTTPException(400, { message: "Payment prompts apply only to pay-on-delivery orders." });
     }
@@ -739,6 +747,9 @@ app.post("/api/checkout", async (c) => {
     const orderId = Number(c.req.param("orderId"));
     const order = await getOrderById(orderId);
     if (!order) throw new HTTPException(404, { message: "Order not found" });
+    if (order.status === "Cancelled") {
+      throw new HTTPException(400, { message: getCancellationMessage(order) });
+    }
     if (order.paymentMethod !== "PayOnDelivery") {
       throw new HTTPException(400, { message: order.paymentMethod === "Mpesa" ? "Use M-Pesa STK push for this order." : "This order was already paid by card." });
     }
@@ -775,6 +786,9 @@ app.post("/api/checkout", async (c) => {
     const orderId = Number(c.req.param("orderId"));
     const order = await getOrderById(orderId);
     if (!order) throw new HTTPException(404, { message: "Order not found" });
+    if (order.status === "Cancelled") {
+      throw new HTTPException(400, { message: getCancellationMessage(order) });
+    }
     if (order.paymentMethod !== "Mpesa") {
       throw new HTTPException(400, { message: "This order was not created for M-Pesa payment." });
     }
@@ -860,6 +874,9 @@ app.post("/api/checkout", async (c) => {
     const order = await getOrderByMpesaCheckoutRequestId(callback.CheckoutRequestID);
     if (!order) {
       return c.json({ success: true, ignored: true });
+    }
+    if (order.status === "Cancelled") {
+      return c.json({ success: true, ignored: true, cancelled: true });
     }
 
     const metadata = callback.CallbackMetadata?.Item || [];
@@ -1237,7 +1254,7 @@ app.post("/api/checkout", async (c) => {
     throw new HTTPException(400, { message: "Invalid order ID" });
   }
 
-  let body: { status: OrderStatus };
+  let body: { status: OrderStatus; cancellationMessage?: string };
   try {
     body = await c.req.json();
   } catch {
@@ -1250,7 +1267,24 @@ app.post("/api/checkout", async (c) => {
   }
 
   try {
-    const order = await updateOrderStatus(orderId, body.status);
+    const existingOrder = await getOrderById(orderId);
+    if (!existingOrder) throw new HTTPException(404, { message: "Order not found" });
+
+    let order: Order | null;
+    if (body.status === "Cancelled") {
+      const cancellationMessage = body.cancellationMessage?.trim() || "Your order was cancelled. Any pending charges were voided and further payment is disabled.";
+
+      if (existingOrder.status !== "Cancelled" && existingOrder.amountPaid > 0 && existingOrder.userId) {
+        if (existingOrder.paymentMethod === "PayOnDelivery" && ["ACCOUNT_BALANCE", "ACCOUNT_CREDIT"].includes(existingOrder.paymentReference || "")) {
+          await adjustUserAccountBalance(existingOrder.userId, existingOrder.amountPaid);
+        }
+        await updateUserSpent(existingOrder.userId, -existingOrder.amountPaid);
+      }
+
+      order = await cancelOrder(orderId, cancellationMessage);
+    } else {
+      order = await updateOrderStatus(orderId, body.status);
+    }
     if (!order) throw new HTTPException(404, { message: "Order not found" });
     return c.json({ success: true, order });
   } catch (err) {

@@ -53,6 +53,8 @@ export interface Order {
   paymentPromptRequestedAt?: string;
   paymentPromptCount?: number;
   paymentHistory?: PaymentEntry[];
+  cancelledAt?: string;
+  cancellationMessage?: string;
   paymentPhone?: string;
   paymentReference?: string;
   paymentProvider?: "Card" | "PayOnDelivery" | "Mpesa";

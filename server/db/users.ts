@@ -264,8 +264,8 @@ export async function updateStaffProfile(
 
 export async function updateUserSpent(userId: string, amount: number): Promise<UserProfile> {
   const profile = await getUserProfile(userId);
-  profile.totalSpent += amount;
-  profile.points += Math.floor(amount); // 1 point per dollar
+  profile.totalSpent = Math.max(0, Number((profile.totalSpent + amount).toFixed(2)));
+  profile.points = Math.max(0, profile.points + Math.floor(amount)); // 1 point per dollar
 
   // Update tier based on spending
   if (profile.tier !== "The Alchemist Circle") {

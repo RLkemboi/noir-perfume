@@ -10,7 +10,7 @@ import type { Order } from "../../server/types";
 
 export default function Dashboard() {
   const { user, profile, logout, isGuest, getIdToken, refreshProfile, loading: authLoading } = useAuth();
-  const { sessionId } = useCart();
+  const { addItem, setIsOpen, sessionId } = useCart();
   const navigate = useNavigate();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
@@ -260,6 +260,26 @@ export default function Dashboard() {
       toast.error(err instanceof Error ? err.message : "Failed to send M-Pesa prompt");
     } finally {
       setRequestingMpesaId(null);
+    }
+  };
+
+  const handleReorder = async (order: Order) => {
+    try {
+      for (const item of order.items) {
+        for (let count = 0; count < item.quantity; count += 1) {
+          await addItem({
+            productId: item.productId,
+            name: item.name,
+            brand: item.brand,
+            price: item.price,
+            image: item.image,
+          });
+        }
+      }
+      setIsOpen(true);
+      toast.success("Items added back to your bag.");
+    } catch {
+      toast.error("Unable to re-order these items right now.");
     }
   };
 
@@ -558,6 +578,33 @@ export default function Dashboard() {
                           </div>
                         </div>
 
+                        {order.status === "Cancelled" && (
+                          <div className="rounded border border-destructive/30 bg-destructive/10 p-4 space-y-3">
+                            <div>
+                              <p className="text-[10px] tracking-widest uppercase font-bold text-destructive">Order Cancelled</p>
+                              <p className="mt-2 text-sm text-muted-foreground">
+                                {order.cancellationMessage || "This order was cancelled. Any pending charges were voided and payment is disabled."}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-3">
+                              <button
+                                onClick={() => handleReorder(order)}
+                                className="px-4 py-2 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light"
+                              >
+                                Re-Order Items
+                              </button>
+                              {order.items[0] && (
+                                <Link
+                                  to={`/product/${order.items[0].productId}`}
+                                  className="px-4 py-2 border border-border text-[10px] tracking-widest uppercase font-bold text-muted-foreground hover:text-foreground hover:border-primary/40"
+                                >
+                                  View Product
+                                </Link>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
                         <div className="grid gap-2 md:grid-cols-3">
                           <div className={`rounded border px-3 py-3 text-xs ${order.agentDeliveryConfirmed ? "border-emerald-500/30 bg-emerald-500/5" : "border-yellow-500/30 bg-yellow-500/5"}`}>
                             <p className="font-bold uppercase tracking-widest text-[10px]">Agent</p>
@@ -585,7 +632,7 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {order.paymentMethod === "PayOnDelivery" && (
+                        {order.paymentMethod === "PayOnDelivery" && order.status !== "Cancelled" && (
                           <div className="space-y-3 border border-border/50 rounded p-4">
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                               <div>
@@ -625,7 +672,7 @@ export default function Dashboard() {
                           </div>
                         )}
 
-                        {order.paymentMethod === "Mpesa" && order.amountDue > 0 && (
+                        {order.paymentMethod === "Mpesa" && order.amountDue > 0 && order.status !== "Cancelled" && (
                           <div className="space-y-3 border border-border/50 rounded p-4">
                             <div>
                               <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">M-Pesa Payment</p>

@@ -229,6 +229,34 @@ export async function updateOrderStatus(orderId: number, status: OrderStatus): P
   );
 }
 
+export async function cancelOrder(orderId: number, cancellationMessage: string): Promise<Order | null> {
+  const now = new Date().toISOString();
+  const order = await getOrderById(orderId);
+  if (!order) return null;
+
+  if (order.status !== "Cancelled") {
+    order.status = "Cancelled";
+    order.statusHistory = [...(order.statusHistory || []), { status: "Cancelled", date: now }];
+  }
+
+  order.cancelledAt = now;
+  order.cancellationMessage = cancellationMessage;
+  order.paymentStatus = "Unpaid";
+  order.amountPaid = 0;
+  order.amountDue = 0;
+  order.paymentHistory = [];
+  order.paymentPromptCount = 0;
+  order.paymentPromptRequestedAt = undefined;
+  order.paymentRequestedAt = undefined;
+  order.paymentLastError = cancellationMessage;
+  order.mpesaMerchantRequestId = undefined;
+  order.mpesaCheckoutRequestId = undefined;
+  order.mpesaReceiptNumber = undefined;
+  order.paymentReference = undefined;
+
+  return saveOrder(orderId, order);
+}
+
 async function saveOrder(orderId: number, order: Order): Promise<Order> {
   const normalized = normalizeOrder(order);
 
