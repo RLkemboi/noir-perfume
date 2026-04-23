@@ -56,7 +56,17 @@ app.use("*", async (c, next) => {
 
 app.use(
   cors({
-    origin: ["http://localhost:5173", "http://localhost:4173", "http://localhost:3000"],
+    origin: (origin) => {
+      const allowed = [
+        "http://localhost:5173",
+        "http://localhost:4173",
+        "http://localhost:3000",
+      ];
+      if (!origin) return "*";
+      if (allowed.includes(origin)) return origin;
+      if (origin.endsWith(".onrender.com")) return origin;
+      return null;
+    },
     allowMethods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     credentials: true,

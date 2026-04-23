@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:server": "tsc -p server/tsconfig.json",
+    "build:full": "npm run build:server && npm run build",
+    "start": "node dist-server/index.js",
     "lint": "eslint .",
     "preview": "vite preview",
     "server": "tsx server/index.ts",
