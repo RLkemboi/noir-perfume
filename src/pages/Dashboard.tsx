@@ -32,6 +32,7 @@ export default function Dashboard() {
       if (profile.role === "DeliveryAgent") navigate("/agent");
       if (profile.role === "Admin") navigate("/admin");
       if (profile.role === "Operator") navigate("/operator");
+      if (profile.role === "Manager") navigate("/operator");
       if (profile.role === "Marketing") navigate("/marketing");
     }
   }, [profile, navigate]);

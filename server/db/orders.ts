@@ -1,5 +1,5 @@
 import { db, canUseFirestore, disableFirestore } from "./firebase.js";
-import type { CartItem, Order, ShippingDetails, OrderStatus, PaymentMethod, PaymentEntry, PaymentStatus } from "../types.js";
+import type { CartItem, Order, ShippingDetails, OrderStatus, PaymentMethod, PaymentHistoryEntry, PaymentStatus } from "../types.js";
 
 const memoryOrders = new Map<number, Order>();
 let memoryOrderId = 0;
@@ -25,10 +25,14 @@ async function withOrdersFallback<T>(action: () => Promise<T>, fallback: () => T
 interface CreateOrderOptions {
   initialAmountPaid?: number;
   initialPaymentStatus?: PaymentStatus;
-  initialPaymentHistory?: PaymentEntry[];
+  initialPaymentHistory?: PaymentHistoryEntry[];
   paymentPromptCount?: number;
   paymentPromptRequestedAt?: string;
   paymentReference?: string;
+}
+
+function makePaymentId(): string {
+  return `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function normalizeOrder(order: Order): Order {
@@ -53,7 +57,7 @@ function normalizeOrder(order: Order): Order {
     paymentHistory:
       order.paymentHistory ??
       (paymentMethod === "Card"
-        ? [{ amount: order.total, date: order.createdAt, source: "checkout" }]
+        ? [{ paymentId: makePaymentId(), amount: order.total, timestamp: Date.now(), method: paymentMethod, status: "success" } satisfies PaymentHistoryEntry]
         : []),
     statusHistory: order.statusHistory || [],
     customerDeliveryConfirmed: order.customerDeliveryConfirmed ?? false,
@@ -78,8 +82,8 @@ function createMemoryOrder(
   const now = new Date().toISOString();
   const isCard = paymentMethod === "Card";
   const initialAmountPaid = Number((options.initialAmountPaid ?? (isCard ? total : 0)).toFixed(2));
-  const initialPaymentHistory: PaymentEntry[] = options.initialPaymentHistory ?? (
-    initialAmountPaid > 0 ? [{ amount: initialAmountPaid, date: now, source: "checkout" }] : []
+  const initialPaymentHistory: PaymentHistoryEntry[] = options.initialPaymentHistory ?? (
+    initialAmountPaid > 0 ? [{ paymentId: makePaymentId(), amount: initialAmountPaid, timestamp: Date.now(), method: paymentMethod, status: "success" }] : []
   );
   const initialPromptCount = options.paymentPromptCount ?? 0;
   const initialPaymentStatus = options.initialPaymentStatus ?? (
@@ -90,6 +94,7 @@ function createMemoryOrder(
   const order: Order = {
     orderId: memoryOrderId,
     sessionId,
+    customerId: userId ?? sessionId,  // required — canonical customer key
     items,
     total,
     createdAt: now,
@@ -141,8 +146,8 @@ export async function createOrder(
       const now = new Date().toISOString();
       const isCard = paymentMethod === "Card";
       const initialAmountPaid = Number((options.initialAmountPaid ?? (isCard ? total : 0)).toFixed(2));
-      const initialPaymentHistory: PaymentEntry[] = options.initialPaymentHistory ?? (
-        initialAmountPaid > 0 ? [{ amount: initialAmountPaid, date: now, source: "checkout" }] : []
+      const initialPaymentHistory: PaymentHistoryEntry[] = options.initialPaymentHistory ?? (
+        initialAmountPaid > 0 ? [{ paymentId: makePaymentId(), amount: initialAmountPaid, timestamp: Date.now(), method: paymentMethod, status: "success" }] : []
       );
       const initialPromptCount = options.paymentPromptCount ?? 0;
       const initialPaymentStatus = options.initialPaymentStatus ?? (
@@ -160,6 +165,7 @@ export async function createOrder(
       const order: Order = {
         orderId,
         sessionId,
+        customerId: userId ?? sessionId,  // required — canonical customer key
         items,
         total,
         createdAt: now,
@@ -514,9 +520,8 @@ export async function updateOrderPaymentMeta(
 export async function recordOrderPayment(
   orderId: number,
   amount: number,
-  source: PaymentEntry["source"] = "customer_portal"
+  method?: string
 ): Promise<Order | null> {
-  const now = new Date().toISOString();
   const order = await getOrderById(orderId);
   if (!order) return null;
 
@@ -524,7 +529,15 @@ export async function recordOrderPayment(
   order.amountPaid = Number(((order.amountPaid || 0) + normalizedAmount).toFixed(2));
   order.amountDue = Math.max(0, Number((order.total - order.amountPaid).toFixed(2)));
   order.paymentStatus = order.amountDue === 0 ? "Paid" : order.amountPaid > 0 ? "Partial" : "Unpaid";
-  order.paymentHistory = [...(order.paymentHistory || []), { amount: normalizedAmount, date: now, source }];
+
+  const entry: PaymentHistoryEntry = {
+    paymentId: makePaymentId(),
+    amount: normalizedAmount,
+    timestamp: Date.now(),
+    method: method ?? order.paymentMethod,
+    status: "success",
+  };
+  order.paymentHistory = [...(order.paymentHistory || []), entry];
   order.paymentLastError = undefined;
 
   return saveOrder(orderId, order);

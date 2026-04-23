@@ -5,15 +5,18 @@ const memoryProfiles = new Map<string, UserProfile>();
 
 const usersCollection = db?.collection("users");
 
-const DEFAULT_ADMIN_EMAILS = ["ralph@example.com", "admin@noir-perfume.com"];
-
+/**
+ * Admin emails are configured via the ADMIN_EMAILS environment variable.
+ * Set it as a comma-separated list: ADMIN_EMAILS=you@domain.com,other@domain.com
+ * If unset, no email automatically receives admin elevation — configure it explicitly.
+ */
 function getAdminEmails(): string[] {
-  const configured = process.env.ADMIN_EMAILS
-    ?.split(",")
-    .map((email) => email.trim().toLowerCase())
-    .filter(Boolean);
-
-  return configured && configured.length > 0 ? configured : DEFAULT_ADMIN_EMAILS;
+  return (
+    process.env.ADMIN_EMAILS
+      ?.split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean) ?? []
+  );
 }
 
 function isAdminEmail(email?: string): boolean {
@@ -205,7 +208,15 @@ export async function approveStaff(userId: string): Promise<UserProfile | null> 
       const updated = (await docRef.get()).data() as UserProfile;
       return normalizeProfile(updated);
     },
-    () => approveStaff(userId)
+    () => {
+      const profile = memoryProfiles.get(userId);
+      if (!profile) return null;
+      profile.isApproved = true;
+      profile.employmentStatus = "Active";
+      profile.lastRoleUpdatedAt = new Date().toISOString();
+      memoryProfiles.set(userId, profile);
+      return normalizeProfile(profile);
+    }
   );
 }
 
@@ -258,7 +269,23 @@ export async function updateStaffProfile(
 
       return normalizeProfile((await docRef.get()).data() as UserProfile);
     },
-    () => updateStaffProfile(userId, updates)
+    () => {
+      const profile = memoryProfiles.get(userId);
+      if (!profile) return null;
+      const nextRole = updates.role ?? profile.role;
+      const nextApproved = updates.isApproved ?? profile.isApproved;
+      const nextEmploymentStatus =
+        updates.employmentStatus ?? (nextApproved ? "Active" : getEmploymentStatus(nextRole, nextApproved));
+      Object.assign(profile, {
+        ...updates,
+        role: nextRole,
+        isApproved: nextApproved,
+        employmentStatus: nextEmploymentStatus,
+        lastRoleUpdatedAt: now,
+      });
+      memoryProfiles.set(userId, profile);
+      return normalizeProfile(profile);
+    }
   );
 }
 

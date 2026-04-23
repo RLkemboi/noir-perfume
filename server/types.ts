@@ -28,6 +28,16 @@ export type EmploymentStatus = "Active" | "PendingApproval" | "Suspended";
 
 export type UserRole = "Customer" | "Operator" | "Manager" | "DeliveryAgent" | "Admin" | "Marketing";
 
+/** Strict payment event record — each item in paymentHistory */
+export interface PaymentHistoryEntry {
+  paymentId: string;       // unique ID for this payment event
+  amount: number;
+  timestamp: number;       // unix epoch milliseconds
+  method: string;          // e.g. "Card", "Mpesa", "PayOnDelivery"
+  status: string;          // e.g. "success", "pending", "failed"
+}
+
+/** @deprecated Use PaymentHistoryEntry. Kept for legacy write-path compatibility. */
 export interface PaymentEntry {
   amount: number;
   date: string;
@@ -37,10 +47,11 @@ export interface PaymentEntry {
 export interface Order {
   orderId: number;
   sessionId: string;
+  customerId: string;        // required — canonical customer identifier (uid or session)
   items: CartItem[];
   total: number;
   createdAt: string;
-  userId?: string;
+  userId?: string;           // legacy alias — prefer customerId for new code
   userEmail?: string;
   shipping?: ShippingDetails;
   status: OrderStatus;
@@ -52,7 +63,9 @@ export interface Order {
   payOnDeliveryLimit?: number;
   paymentPromptRequestedAt?: string;
   paymentPromptCount?: number;
-  paymentHistory?: PaymentEntry[];
+  paymentHistory?: PaymentHistoryEntry[];
+  confirmedByAdminId?: string;   // uid of the admin who confirmed this order
+  deliveryAgentId?: string;      // uid of the assigned delivery agent
   cancelledAt?: string;
   cancellationMessage?: string;
   paymentPhone?: string;

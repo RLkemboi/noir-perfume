@@ -309,7 +309,10 @@ function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
       weeklyMap.set(createdWeek.key, createdBucket);
 
       for (const payment of order.paymentHistory || []) {
-        const paymentWeek = resolveWeek(payment.date);
+        const paymentDate = typeof payment.timestamp === "number"
+          ? new Date(payment.timestamp).toISOString()
+          : new Date().toISOString();
+        const paymentWeek = resolveWeek(paymentDate);
         const paymentBucket = weeklyMap.get(paymentWeek.key) ?? { label: paymentWeek.label, bookedRevenue: 0, realizedRevenue: 0, recognizedExpense: 0, weeklyProfit: 0, netWorth: 0 };
         paymentBucket.realizedRevenue += payment.amount;
         weeklyMap.set(paymentWeek.key, paymentBucket);
@@ -1202,7 +1205,10 @@ app.get("/api/user/profile", async (c) => {
         throw new HTTPException(403, { message: "Operator access required" });
       }
       await next();
-    } catch { throw new HTTPException(401, { message: "Invalid token" }); }
+    } catch (err) {
+      if (err instanceof HTTPException) throw err;
+      throw new HTTPException(401, { message: "Invalid token" });
+    }
   }
 
   async function checkMarketing(c: Context, next: Next) {
@@ -1216,7 +1222,10 @@ app.get("/api/user/profile", async (c) => {
         throw new HTTPException(403, { message: "Marketing access required" });
       }
       await next();
-    } catch { throw new HTTPException(401, { message: "Invalid token" }); }
+    } catch (err) {
+      if (err instanceof HTTPException) throw err;
+      throw new HTTPException(401, { message: "Invalid token" });
+    }
   }
 
   // --- OPERATOR ROUTES ---
@@ -1322,6 +1331,7 @@ app.get("/api/user/profile", async (c) => {
       throw new HTTPException(400, { message: "Admins cannot suspend themselves." });
     }
 
+    if (!targetUserId) throw new HTTPException(400, { message: "Missing user ID" });
     const updated = await updateStaffProfile(targetUserId, body);
     if (!updated) throw new HTTPException(404, { message: "Employee not found" });
 
@@ -1392,7 +1402,8 @@ app.get("/api/user/profile", async (c) => {
     return c.json({ success: true, order: updated });
   });
 
-  app.get("/api/orders/session/:sessionId", async (c) => {  const sessionId = c.req.param("sessionId");
+app.get("/api/orders/session/:sessionId", async (c) => {
+  const sessionId = c.req.param("sessionId");
   if (!isValidUUID(sessionId)) {
     throw new HTTPException(400, { message: "Invalid session ID" });
   }

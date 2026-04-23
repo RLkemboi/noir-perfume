@@ -84,7 +84,7 @@ export default function Checkout() {
   const [submitting, setSubmitting] = useState(false);
   const [completed, setCompleted] = useState(false);
   const [orderId, setOrderId] = useState<number | null>(null);
-  const [orderStatus] = useState<string>("Pending");
+  const [orderStatus, setOrderStatus] = useState<string>("Pending");
   const [addressMode, setAddressMode] = useState<"manual" | "saved" | "map">("manual");
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
@@ -124,6 +124,37 @@ export default function Checkout() {
       setMpesaPhone(shipping.phone);
     }
   }, [shipping.phone, mpesaPhone]);
+
+  // Live order-status polling after checkout completes
+  useEffect(() => {
+    if (!completed || !orderId) return;
+    const TERMINAL = ["Delivered", "Cancelled"];
+    if (TERMINAL.includes(orderStatus)) return;
+
+    const poll = async () => {
+      try {
+        const headers: Record<string, string> = {};
+        let url = `/api/orders/${orderId}`;
+        if (user) {
+          const token = await getIdToken();
+          if (token) headers.Authorization = `Bearer ${token}`;
+        } else if (isGuest) {
+          url += `?sessionId=${encodeURIComponent(sessionId)}`;
+        }
+        const res = await fetch(url, { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.order?.status) setOrderStatus(data.order.status as string);
+        }
+      } catch {
+        // Non-fatal — next tick will retry
+      }
+    };
+
+    void poll(); // immediate first fetch
+    const interval = setInterval(() => void poll(), 30_000);
+    return () => clearInterval(interval);
+  }, [completed, orderId, orderStatus, user, isGuest, getIdToken, sessionId]);
 
   useEffect(() => {
     if (!savedAddressKey) {
@@ -340,7 +371,18 @@ export default function Checkout() {
             <div className="pt-4 border-t border-border flex flex-col sm:flex-row justify-between gap-4 text-left">
               <div className="space-y-1">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Estimated Delivery</p>
-                <p className="text-sm font-sans font-bold">Wednesday, 22 April 2026</p>
+                <p className="text-sm font-sans font-bold">
+                  {(() => {
+                    const d = new Date();
+                    let added = 0;
+                    while (added < 3) {
+                      d.setDate(d.getDate() + 1);
+                      const day = d.getDay();
+                      if (day !== 0 && day !== 6) added++;
+                    }
+                    return d.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+                  })()}
+                </p>
               </div>
               <div className="space-y-1 sm:text-right">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Order ID</p>
