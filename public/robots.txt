@@ -1,0 +1,14 @@
+User-agent: *
+Allow: /
+Allow: /product/
+Disallow: /admin
+Disallow: /dashboard
+Disallow: /agent
+Disallow: /operator
+Disallow: /marketing
+Disallow: /profile
+Disallow: /checkout
+Disallow: /staff/
+Disallow: /api/
+
+Sitemap: https://noir-perfume.onrender.com/sitemap.xml

@@ -2,13 +2,114 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Noir Perfume</title>
-  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <!-- ═══════════════════════════════════════
+       PRIMARY SEO META
+  ═══════════════════════════════════════ -->
+  <title>NOIR Perfume — Luxury Fragrances | Oud, Amber &amp; Rare Scents</title>
+  <meta name="description" content="Shop NOIR's curated collection of ultra-premium fragrances — house scents and iconic brands like Tom Ford, Creed, Dior, Chanel &amp; more. Free global shipping on orders over $300." />
+  <meta name="keywords" content="luxury perfume, NOIR perfume, oud fragrance, amber scent, designer fragrance, Creed Aventus, Tom Ford Lost Cherry, Dior Sauvage, niche perfume, eau de parfum" />
+  <meta name="robots" content="index, follow" />
+  <meta name="author" content="NOIR Perfume" />
+  <link rel="canonical" href="https://noir-perfume.onrender.com/" />
+
+  <!-- ═══════════════════════════════════════
+       OPEN GRAPH (Facebook, LinkedIn, WhatsApp)
+  ═══════════════════════════════════════ -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="NOIR Perfume" />
+  <meta property="og:title" content="NOIR Perfume — Luxury Fragrances" />
+  <meta property="og:description" content="Ultra-premium fragrances for those who command attention. House scents &amp; iconic brands. Shop now." />
+  <meta property="og:url" content="https://noir-perfume.onrender.com/" />
+  <meta property="og:image" content="https://noir-perfume.onrender.com/assets/og-cover.jpg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:locale" content="en_US" />
+
+  <!-- ═══════════════════════════════════════
+       TWITTER CARD
+  ═══════════════════════════════════════ -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@NOIRPerfume" />
+  <meta name="twitter:title" content="NOIR Perfume — Luxury Fragrances" />
+  <meta name="twitter:description" content="Ultra-premium fragrances for those who command attention. Shop the collection." />
+  <meta name="twitter:image" content="https://noir-perfume.onrender.com/assets/og-cover.jpg" />
+
+  <!-- ═══════════════════════════════════════
+       STRUCTURED DATA — Organization + WebSite
+  ═══════════════════════════════════════ -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        "@id": "https://noir-perfume.onrender.com/#organization",
+        "name": "NOIR Perfume",
+        "url": "https://noir-perfume.onrender.com",
+        "logo": {
+          "@type": "ImageObject",
+          "url": "https://noir-perfume.onrender.com/favicon.svg"
+        },
+        "sameAs": []
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://noir-perfume.onrender.com/#website",
+        "url": "https://noir-perfume.onrender.com",
+        "name": "NOIR Perfume",
+        "description": "Ultra-premium luxury fragrances — house scents and iconic brands.",
+        "publisher": { "@id": "https://noir-perfume.onrender.com/#organization" },
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": "https://noir-perfume.onrender.com/?q={search_term_string}"
+          },
+          "query-input": "required name=search_term_string"
+        }
+      },
+      {
+        "@type": "OnlineStore",
+        "@id": "https://noir-perfume.onrender.com/#store",
+        "name": "NOIR Perfume",
+        "url": "https://noir-perfume.onrender.com",
+        "currenciesAccepted": "USD",
+        "priceRange": "$45 - $680",
+        "description": "A curated marketplace of ultra-premium fragrances from iconic houses and niche perfumers.",
+        "hasMap": "",
+        "openingHoursSpecification": {
+          "@type": "OpeningHoursSpecification",
+          "dayOfWeek": ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"],
+          "opens": "00:00",
+          "closes": "23:59"
+        }
+      }
+    ]
+  }
+  </script>
+
+  <!-- ═══════════════════════════════════════
+       FAVICON & ICONS
+  ═══════════════════════════════════════ -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/favicon.svg" />
+  <meta name="theme-color" content="#0a0a0a" />
+
+  <!-- ═══════════════════════════════════════
+       PRECONNECTS (performance + LCP)
+  ═══════════════════════════════════════ -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+
+  <!-- ═══════════════════════════════════════
+       FONTS
+  ═══════════════════════════════════════ -->
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
 </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
 </html>

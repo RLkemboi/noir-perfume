@@ -76,6 +76,17 @@ app.use(
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
+// SEO: robots.txt and sitemap.xml served explicitly so crawlers always find them
+app.get("/robots.txt", (c) => {
+  c.header("Content-Type", "text/plain");
+  return c.body(readFileSync("./dist/robots.txt", "utf-8"));
+});
+
+app.get("/sitemap.xml", (c) => {
+  c.header("Content-Type", "application/xml");
+  return c.body(readFileSync("./dist/sitemap.xml", "utf-8"));
+});
+
 // Products
 app.get("/api/products", (c) => c.json({ products, count: products.length }));
 

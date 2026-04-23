@@ -5,6 +5,7 @@ import { ArrowLeft, Star, Clock, Volume2, Gem, History, ShoppingBag, ShieldCheck
 import { products, type Product } from "@/data";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
+import { useSEO, buildProductSchema } from "@/hooks/useSEO";
 
 const Meter = ({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) => (
   <div className="space-y-1.5">
@@ -37,6 +38,19 @@ export default function ProductDetail() {
   const { addItem } = useCart();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
+
+  useSEO(
+    product
+      ? {
+          title: `${product.name} by ${product.brand} — ${product.subtitle}`,
+          description: `${product.description} Top notes: ${product.topNotes.join(", ")}. Heart: ${product.heartNotes.join(", ")}. Base: ${product.baseNotes.join(", ")}. Rated ${product.rating}/5 by ${product.reviews.toLocaleString()} fragrance lovers.`,
+          image: product.image.startsWith("http") ? product.image : `https://noir-perfume.onrender.com${product.image}`,
+          url: `/product/${product.id}`,
+          type: "product",
+          structuredData: buildProductSchema(product),
+        }
+      : {}
+  );
 
   useEffect(() => {
     const local = products.find((p) => p.id === id);
