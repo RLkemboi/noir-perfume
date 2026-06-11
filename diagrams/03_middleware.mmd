@@ -1,0 +1,35 @@
+flowchart LR
+    REQ([Incoming Request])
+    ROUTE["Route Handler"]
+    ERR["onError\nHTTPException → JSON with status\nUnknown → 500 Internal Server Error"]
+
+    REQ --> COOP["COOP Header\nCross-Origin-Opener-Policy: same-origin-allow-popups\nNeeded for Firebase Auth popups"]
+    COOP --> CORS["CORS\nAllows: localhost:5173, localhost:4173, localhost:3000, *.onrender.com\nAllows: Authorization header, credentials"]
+    CORS --> SPLIT{Route type?}
+
+    SPLIT -->|Public route| ROUTE
+
+    SPLIT -->|adminAuthMiddleware\nProduct write/read routes| AM1["Extract Bearer token\nfrom Authorization header"]
+    AM1 --> AM2["auth.verifyIdToken(token)\nFirebase Admin SDK"]
+    AM2 --> AM3{Admin role\nin Firestore?}
+    AM3 -->|Yes| ROUTE
+    AM3 -->|No — wrong role| AM4["403 Forbidden:\nAdmin access required"]
+    AM3 -->|Token invalid| AM5["401 Unauthorized:\nInvalid token"]
+    AM3 -->|Config mismatch| AM6["503 Service Unavailable:\nFirebase config mismatch"]
+
+    SPLIT -->|checkAdmin\nAdmin API routes| CKA["Extract Bearer token\nverify + check Admin role"]
+    CKA -->|Valid Admin| ROUTE
+    CKA -->|Not Admin| CKAF["403 Forbidden:\nAdmin access required"]
+    CKA -->|Token error| CKAE["401 Unauthorized"]
+
+    SPLIT -->|checkOperator\nOperator queue route| CKO["Extract Bearer token\nverify + check role"]
+    CKO -->|Operator, Manager, or Admin| ROUTE
+    CKO -->|Wrong role| CKOF["403 Operator access required"]
+    CKO -->|Token error| CKOE["401 Unauthorized"]
+
+    SPLIT -->|checkMarketing\nMarketing routes| CKM["Extract Bearer token\nverify + check role"]
+    CKM -->|Marketing, Manager, or Admin| ROUTE
+    CKM -->|Wrong role| CKMF["403 Marketing access required"]
+    CKM -->|Token error| CKME["401 Unauthorized"]
+
+    ROUTE --> ERR

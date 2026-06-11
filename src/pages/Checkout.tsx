@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { TierBadge } from "@/components/ui/TierBadge";
 import type { PaymentMethod } from "../../server/types";
+import { calculateProjectedLoyaltyPoints, getTierPolicy } from "@/utils/membership";
 
 interface ShippingForm {
   fullName: string;
@@ -28,17 +29,6 @@ interface SavedAddress extends ShippingForm {
 }
 
 const SHIPPING_COST = 15;
-const COD_LIMITS: Record<string, number> = {
-  Bronze: 250,
-  Silver: 250,
-  Gold: 600,
-  Platinum: 1200,
-  Diamond: 2500,
-  "The Alchemist Circle": 5000,
-};
-
-const ACCOUNT_BALANCE_TIERS = ["Silver", "Gold", "Platinum", "Diamond", "The Alchemist Circle"] as const;
-
 function safeReadAddresses(key: string): SavedAddress[] {
   try {
     const raw = localStorage.getItem(key);
@@ -90,17 +80,34 @@ export default function Checkout() {
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
   const [saveAddressForFuture, setSaveAddressForFuture] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Card");
+  const [upfrontAmountInput, setUpfrontAmountInput] = useState("");
   const [mpesaPhone, setMpesaPhone] = useState("");
   const [completionNote, setCompletionNote] = useState("Your luxury fragrance journey has begun.");
 
   const total = subtotal + (subtotal > 0 ? SHIPPING_COST : 0);
   const savedAddressKey = user ? `noir-saved-addresses:${user.uid}` : "";
-  const canPayOnDelivery = !!profile && profile.tier !== "Junior";
-  const usesAccountBalance = !!profile && ACCOUNT_BALANCE_TIERS.includes(profile.tier as typeof ACCOUNT_BALANCE_TIERS[number]);
-  const needsBronzeDeposit = profile?.tier === "Bronze";
-  const payOnDeliveryLimit = profile ? COD_LIMITS[profile.tier] ?? 0 : 0;
-  const bronzeDepositAmount = Number((total * 0.5).toFixed(2));
-  const projectedAccountBalance = Number(((profile?.accountBalance ?? 0) - total).toFixed(2));
+  const tierPolicy = profile ? getTierPolicy(profile.tier) : null;
+  const canPayOnDelivery = !!profile && !!tierPolicy?.allowCashOnDelivery;
+  const usesAccountBalance = !!profile && tierPolicy?.canUseLedger;
+  const juniorPrepayOnly = profile?.tier === "Junior";
+  const minLedgerUpfrontRatio = tierPolicy?.minLedgerUpfrontRatio ?? 0;
+  const minimumLedgerUpfront = Number((total * minLedgerUpfrontRatio).toFixed(2));
+  const normalizedUpfrontAmount = Number(
+    Math.max(0, Math.min(total, Number(upfrontAmountInput || 0))).toFixed(2)
+  );
+  const ledgerCharge = usesAccountBalance && paymentMethod === "PayOnDelivery"
+    ? Number((total - normalizedUpfrontAmount).toFixed(2))
+    : 0;
+  const projectedAccountBalance = Number(
+    (((profile?.accountBalance ?? 0) - ledgerCharge)).toFixed(2)
+  );
+  const projectedOutstandingBalance = Number(Math.max(0, -projectedAccountBalance).toFixed(2));
+  const outstandingLimit = tierPolicy?.maxOutstandingBalance ?? null;
+  const exceedsOutstandingLimit =
+    usesAccountBalance &&
+    outstandingLimit != null &&
+    projectedOutstandingBalance > outstandingLimit;
+  const payOnDeliveryBlocked = !canPayOnDelivery || (usesAccountBalance && exceedsOutstandingLimit);
 
   const lineTotal = (price: string, qty: number) => {
     const val = Number(price.replace(/[^0-9.]/g, "")) || 0;
@@ -124,6 +131,21 @@ export default function Checkout() {
       setMpesaPhone(shipping.phone);
     }
   }, [shipping.phone, mpesaPhone]);
+
+  useEffect(() => {
+    if (!canPayOnDelivery && paymentMethod === "PayOnDelivery") {
+      setPaymentMethod("Card");
+    }
+  }, [canPayOnDelivery, paymentMethod]);
+
+  useEffect(() => {
+    if (paymentMethod !== "PayOnDelivery" || !usesAccountBalance) return;
+    if (minimumLedgerUpfront <= 0) return;
+    const numeric = Number(upfrontAmountInput || 0);
+    if (!Number.isFinite(numeric) || numeric < minimumLedgerUpfront) {
+      setUpfrontAmountInput(minimumLedgerUpfront.toFixed(2));
+    }
+  }, [paymentMethod, usesAccountBalance, minimumLedgerUpfront, upfrontAmountInput]);
 
   // Live order-status polling after checkout completes
   useEffect(() => {
@@ -238,7 +260,30 @@ export default function Checkout() {
     }
 
     if (paymentMethod === "PayOnDelivery" && !canPayOnDelivery) {
-      toast.error("Junior members do not yet have pay-on-delivery access.");
+      toast.error("Your current tier cannot use pay-on-delivery.");
+      return;
+    }
+
+    if (juniorPrepayOnly && paymentMethod === "PayOnDelivery") {
+      toast.error("Junior members must prepay before delivery.");
+      return;
+    }
+
+    if (paymentMethod === "PayOnDelivery" && usesAccountBalance) {
+      if (normalizedUpfrontAmount < minimumLedgerUpfront) {
+        toast.error(`This tier requires at least $${minimumLedgerUpfront.toFixed(2)} upfront for delivery credit.`);
+        return;
+      }
+      if (exceedsOutstandingLimit) {
+        toast.error(
+          `This order exceeds your outstanding balance limit of $${(outstandingLimit ?? 0).toFixed(2)}.`
+        );
+        return;
+      }
+    }
+
+    if (paymentMethod === "PayOnDelivery" && !user) {
+      toast.error("Sign in to use pay-on-delivery.");
       return;
     }
 
@@ -269,6 +314,7 @@ export default function Checkout() {
           shipping: { ...shipping, source: addressMode },
           paymentMethod,
           paymentPhone: paymentMethod === "Mpesa" ? mpesaPhone : undefined,
+          upfrontAmount: paymentMethod === "PayOnDelivery" && usesAccountBalance ? normalizedUpfrontAmount : undefined,
         }),
       });
 
@@ -287,10 +333,10 @@ export default function Checkout() {
             ? data.mpesa?.customerMessage || "Sandbox payment completed successfully. Live credentials will replace this simulated charge later."
             : data.mpesa?.customerMessage || "Check your phone and complete the M-Pesa STK prompt to finish payment."
           : paymentMethod === "PayOnDelivery" && usesAccountBalance
-            ? `This order has been posted to your running account. Projected balance: $${projectedAccountBalance.toFixed(2)}.`
-            : paymentMethod === "PayOnDelivery" && needsBronzeDeposit
-              ? `Your 50% Bronze deposit of $${bronzeDepositAmount.toFixed(2)} is recorded. The remaining $${Math.max(0, total - bronzeDepositAmount).toFixed(2)} must be cleared before admin finalization.`
-          : "Your luxury fragrance journey has begun."
+            ? `Ledger charge posted. Upfront $${normalizedUpfrontAmount.toFixed(2)}, remaining $${ledgerCharge.toFixed(2)}. Projected balance: $${projectedAccountBalance.toFixed(2)}.`
+            : paymentMethod === "PayOnDelivery"
+              ? "Your pay-after-delivery order is confirmed. Payment will be settled during delivery completion."
+              : "Your luxury fragrance journey has begun."
       );
       await refreshProfile();
       toast.success(`Order #${data.orderId} confirmed`, {
@@ -403,7 +449,9 @@ export default function Checkout() {
                 <p className="text-xs font-bold tracking-widest uppercase text-primary">Status Updated</p>
                 <div className="flex items-center gap-2">
                   <TierBadge tier={profile.tier} />
-                  <span className="text-xs text-muted-foreground">+ {(total * 0.05).toFixed(2)} Noir Points earned</span>
+                  <span className="text-xs text-muted-foreground">
+                    + {calculateProjectedLoyaltyPoints(total, profile.tier).toFixed(2)} Noir Points earned
+                  </span>
                 </div>
               </div>
               <div className="text-right">
@@ -804,26 +852,55 @@ export default function Checkout() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => canPayOnDelivery && setPaymentMethod("PayOnDelivery")}
-                      disabled={!canPayOnDelivery}
+                      onClick={() => canPayOnDelivery && !payOnDeliveryBlocked && setPaymentMethod("PayOnDelivery")}
+                      disabled={!canPayOnDelivery || payOnDeliveryBlocked}
                       className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors disabled:opacity-50 ${paymentMethod === "PayOnDelivery" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
                     >
-                      {needsBronzeDeposit ? "Bronze 50% Deposit" : usesAccountBalance ? "Account Balance / Credit" : "Pay on Delivery"}
+                      {usesAccountBalance ? "Running Balance / Credit" : "Pay After Delivery"}
                     </button>
                     <p className="text-[10px] text-muted-foreground leading-relaxed">
                       {!profile
-                        ? "Sign in to unlock tier-based delivery payment options."
-                        : profile.tier === "Junior"
-                          ? "Junior tier does not include pay on delivery yet."
-                          : needsBronzeDeposit
-                            ? `Bronze orders require a 50% upfront deposit of $${bronzeDepositAmount.toFixed(2)}. Limit: $${payOnDeliveryLimit.toFixed(2)} per order.`
-                            : `Your ${profile.tier} account can carry this order up to $${payOnDeliveryLimit.toFixed(2)}. Projected balance after checkout: $${projectedAccountBalance.toFixed(2)}.`}
+                        ? "Guests can check out with Card or M-Pesa. Sign in to unlock member pay-after-delivery options."
+                        : juniorPrepayOnly
+                          ? "Junior members must prepay before delivery. COD unlocks at Bronze."
+                          : !canPayOnDelivery
+                            ? `${profile.tier} members currently use prepay checkout only.`
+                            : usesAccountBalance
+                              ? outstandingLimit == null
+                                ? `${profile.tier} has unlimited ledger capacity. Projected balance after this order: $${projectedAccountBalance.toFixed(2)}.`
+                                : `Outstanding limit: $${outstandingLimit.toFixed(2)}. Projected outstanding after this order: $${projectedOutstandingBalance.toFixed(2)}.`
+                              : `${profile.tier} can use COD without ledger debt.`}
                     </p>
                     {paymentMethod === "PayOnDelivery" && profile && (
                       <div className="rounded border border-primary/20 bg-primary/5 p-4 text-[10px] text-muted-foreground leading-relaxed">
-                        {needsBronzeDeposit
-                          ? `Bronze members pay 50% now and clear the rest before admin delivery finalization.`
-                          : `Silver tier and above now use a running account balance instead of per-order partial payments. Positive balances act as deposits. Negative balances represent credit to settle later.`}
+                        {usesAccountBalance
+                          ? `Ledger tier rules: upfront required $${minimumLedgerUpfront.toFixed(2)} minimum (${Math.round(minLedgerUpfrontRatio * 100)}%). Remaining amount becomes ledger debt.`
+                          : "Bronze COD settles at delivery completion. Ledger and overdraft are unavailable on this tier."}
+                      </div>
+                    )}
+                    {paymentMethod === "PayOnDelivery" && profile && usesAccountBalance && (
+                      <div className="space-y-2 rounded border border-primary/20 bg-primary/5 p-4">
+                        <label className="text-[10px] tracking-widest uppercase text-primary font-bold">
+                          Upfront Payment
+                        </label>
+                        <input
+                          type="number"
+                          min={minimumLedgerUpfront.toFixed(2)}
+                          max={total.toFixed(2)}
+                          step="0.01"
+                          value={upfrontAmountInput}
+                          onChange={(e) => setUpfrontAmountInput(e.target.value)}
+                          placeholder={minimumLedgerUpfront > 0 ? minimumLedgerUpfront.toFixed(2) : "0.00"}
+                          className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                        />
+                        <p className="text-[10px] text-muted-foreground">
+                          Remaining ledger charge: ${ledgerCharge.toFixed(2)}. Projected balance: ${projectedAccountBalance.toFixed(2)}.
+                        </p>
+                        {exceedsOutstandingLimit && (
+                          <p className="text-[10px] text-destructive">
+                            This would exceed your outstanding limit of ${outstandingLimit?.toFixed(2)}.
+                          </p>
+                        )}
                       </div>
                     )}
                     {paymentMethod === "Mpesa" && (

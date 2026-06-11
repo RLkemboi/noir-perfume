@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Noir Perfume — Flow Architecture</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+  <style>
+    /* ── Design tokens ─────────────────────────────────────── */
+    :root {
+      --obsidian:       #0a0a0a;
+      --obsidian-light: #111111;
+      --obsidian-mid:   #181610;
+      --gold:           #c9a227;
+      --gold-light:     #e5c04a;
+      --gold-dark:      #8a6b1a;
+      --gold-grad:      linear-gradient(135deg, #c9a227, #e5c04a, #8a6b1a);
+      --gold-glow:      0 0 32px -8px rgba(201,162,39,0.28);
+      --cream:          #e8e2d5;
+      --muted:          #6e6455;
+      --muted-light:    #9a8f7e;
+      --border:         rgba(255,255,255,0.055);
+      --border-gold:    rgba(201,162,39,0.22);
+      --border-gold-hi: rgba(201,162,39,0.55);
+      --font-serif:     'Playfair Display', Georgia, serif;
+      --font-sans:      'Inter', system-ui, sans-serif;
+    }
+
+    /* ── Reset ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--obsidian);
+      color: var(--cream);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* ── Scrollbar ─────────────────────────────────────────── */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: var(--obsidian); }
+    ::-webkit-scrollbar-thumb { background: rgba(201,162,39,0.22); border-radius: 2px; }
+    ::-webkit-scrollbar-thumb:hover { background: rgba(201,162,39,0.44); }
+
+    /* ── Header ────────────────────────────────────────────── */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background: rgba(10,10,10,0.88);
+      backdrop-filter: blur(28px);
+      -webkit-backdrop-filter: blur(28px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 40px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: center;
+      gap: 32px;
+      min-height: 64px;
+    }
+
+    .brand {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .brand-name {
+      font-family: var(--font-serif);
+      font-size: 1rem;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: var(--gold-grad);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+    }
+    .brand-sub {
+      font-size: 0.58rem;
+      font-weight: 400;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--muted);
+      line-height: 1;
+    }
+
+    /* ── Layer indicator (center) ──────────────────────────── */
+    .layer-crumb {
+      text-align: center;
+      font-size: 0.62rem;
+      letter-spacing: 0.22em;
+      text-transform: uppercase;
+      color: var(--muted);
+      transition: color 0.3s;
+    }
+    .layer-crumb span {
+      color: var(--gold);
+    }
+
+    /* ── Nav tabs ───────────────────────────────────────────── */
+    nav {
+      display: flex;
+      border: 1px solid var(--border);
+    }
+    nav button {
+      padding: 0 22px;
+      height: 36px;
+      background: transparent;
+      border: none;
+      border-left: 1px solid var(--border);
+      color: var(--muted);
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-size: 0.63rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      transition: color 0.18s, background 0.18s, box-shadow 0.18s;
+      white-space: nowrap;
+      position: relative;
+    }
+    nav button:first-child { border-left: none; }
+    nav button:hover { color: var(--gold-light); background: rgba(201,162,39,0.04); }
+    nav button.active {
+      color: var(--gold);
+      background: rgba(201,162,39,0.07);
+      box-shadow: inset 0 -2px 0 var(--gold);
+    }
+
+    /* ── Gold rule ─────────────────────────────────────────── */
+    .gold-rule {
+      height: 1px;
+      background: var(--gold-grad);
+      opacity: 0.35;
+    }
+
+    /* ── Main ──────────────────────────────────────────────── */
+    main {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 40px 40px 80px;
+    }
+
+    /* ── Layer panel ────────────────────────────────────────── */
+    .layer { display: none; }
+    .layer.active { display: block; animation: fadeslide 0.28s ease; }
+    @keyframes fadeslide {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .layer-head {
+      margin-bottom: 32px;
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+    }
+    .layer-head-left { display: flex; align-items: baseline; gap: 16px; }
+    .layer-title {
+      font-family: var(--font-serif);
+      font-size: 1.75rem;
+      font-weight: 400;
+      font-style: italic;
+      color: var(--cream);
+      line-height: 1;
+    }
+    .layer-meta {
+      font-size: 0.62rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    /* ── Diagram card ───────────────────────────────────────── */
+    .diagram-card {
+      background: rgba(255,255,255,0.018);
+      border: 1px solid var(--border);
+      margin-bottom: 20px;
+      position: relative;
+      transition: border-color 0.25s;
+    }
+    .diagram-card:hover {
+      border-color: var(--border-gold);
+    }
+
+    .card-head {
+      padding: 11px 18px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .card-label {
+      font-size: 0.6rem;
+      font-weight: 500;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .card-actions { display: flex; gap: 6px; }
+    .act-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted-light);
+      padding: 3px 10px;
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-size: 0.58rem;
+      font-weight: 500;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      transition: all 0.15s;
+      line-height: 18px;
+    }
+    .act-btn:hover { border-color: var(--border-gold); color: var(--gold); }
+    .act-btn.on    { border-color: var(--border-gold-hi); color: var(--gold); background: rgba(201,162,39,0.06); }
+
+    /* ── Viewport ───────────────────────────────────────────── */
+    .diagram-viewport {
+      padding: 24px;
+      overflow: auto;
+      position: relative;
+    }
+    /* Subtle gold fade-out hint on right edge when content overflows */
+    .diagram-viewport::after {
+      content: '';
+      position: absolute;
+      top: 0; right: 0; bottom: 0;
+      width: 40px;
+      background: linear-gradient(to right, transparent, rgba(10,10,10,0.7));
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .diagram-viewport.has-overflow::after { opacity: 1; }
+
+    .diagram-render {
+      display: block;
+      transform-origin: top left;
+      transition: transform 0.35s cubic-bezier(0.4,0,0.2,1);
+    }
+    .diagram-render svg {
+      display: block;
+    }
+
+    .vp-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 56px 24px;
+      color: var(--muted);
+      font-size: 0.68rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    .vp-loading::before {
+      content: '';
+      width: 16px; height: 16px;
+      border: 1px solid var(--border-gold);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .vp-error {
+      margin: 24px;
+      padding: 16px 20px;
+      background: rgba(180,40,40,0.07);
+      border: 1px solid rgba(180,40,40,0.25);
+      color: #c87070;
+      font-size: 0.72rem;
+      font-family: monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* ── Fullscreen overlay ─────────────────────────────────── */
+    #overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      background: rgba(10,10,10,0.97);
+      flex-direction: column;
+    }
+    #overlay.open { display: flex; }
+
+    .overlay-head {
+      padding: 16px 28px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .overlay-label {
+      font-size: 0.62rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .overlay-close {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted-light);
+      padding: 4px 14px;
+      cursor: pointer;
+      font-family: var(--font-sans);
+      font-size: 0.6rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      transition: all 0.15s;
+    }
+    .overlay-close:hover { border-color: var(--border-gold); color: var(--gold); }
+
+    .overlay-body {
+      flex: 1;
+      overflow: auto;
+      padding: 32px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: flex-start;
+    }
+    #overlay-svg-mount svg { display: block; }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ─────────────────────────────────────────────── -->
+<header>
+  <div class="brand">
+    <span class="brand-name">Noir Perfume</span>
+    <span class="brand-sub">Flow Architecture</span>
+  </div>
+
+  <div class="layer-crumb" id="crumb">
+    Layer <span id="crumb-name">User Journey</span> &nbsp;·&nbsp; 1 / 3
+  </div>
+
+  <nav id="layer-nav">
+    <button class="active" data-layer="user-journey" data-idx="1" onclick="showLayer('user-journey',this)">User Journey</button>
+    <button data-layer="backend-flow" data-idx="2" onclick="showLayer('backend-flow',this)">Backend Flow</button>
+    <button data-layer="middleware" data-idx="3" onclick="showLayer('middleware',this)">Middleware</button>
+  </nav>
+</header>
+
+<div class="gold-rule"></div>
+
+<!-- ── Main ───────────────────────────────────────────────── -->
+<main>
+
+  <!-- USER JOURNEY -->
+  <div id="layer-user-journey" class="layer active">
+    <div class="layer-head">
+      <div class="layer-head-left">
+        <h2 class="layer-title">User Journey</h2>
+        <span class="layer-meta">Plain-language flow · no technical terms</span>
+      </div>
+    </div>
+
+    <div class="diagram-card" data-diagram-id="user-journey">
+      <div class="card-head">
+        <span class="card-label">End-to-end user flow</span>
+        <div class="card-actions">
+          <button class="act-btn" onclick="toggleMode('user-journey',this)">Expand</button>
+          <button class="act-btn" onclick="openOverlay('user-journey')">Fullscreen</button>
+        </div>
+      </div>
+      <div class="diagram-viewport" id="vp-user-journey">
+        <div class="diagram-render" id="render-user-journey">
+          <div class="vp-loading">Rendering</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BACKEND FLOW -->
+  <div id="layer-backend-flow" class="layer">
+    <div class="layer-head">
+      <div class="layer-head-left">
+        <h2 class="layer-title">Backend Flow</h2>
+        <span class="layer-meta">Routes · data access · role enforcement</span>
+      </div>
+    </div>
+
+    <div class="diagram-card" data-diagram-id="frontend-app">
+      <div class="card-head">
+        <span class="card-label">Frontend — React 19 · Vite · TypeScript</span>
+        <div class="card-actions">
+          <button class="act-btn" onclick="toggleMode('frontend-app',this)">Expand</button>
+          <button class="act-btn" onclick="openOverlay('frontend-app')">Fullscreen</button>
+        </div>
+      </div>
+      <div class="diagram-viewport" id="vp-frontend-app">
+        <div class="diagram-render" id="render-frontend-app">
+          <div class="vp-loading">Rendering</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="diagram-card" data-diagram-id="backend-api">
+      <div class="card-head">
+        <span class="card-label">Backend API — Hono · Node.js · Firebase Firestore</span>
+        <div class="card-actions">
+          <button class="act-btn" onclick="toggleMode('backend-api',this)">Expand</button>
+          <button class="act-btn" onclick="openOverlay('backend-api')">Fullscreen</button>
+        </div>
+      </div>
+      <div class="diagram-viewport" id="vp-backend-api">
+        <div class="diagram-render" id="render-backend-api">
+          <div class="vp-loading">Rendering</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MIDDLEWARE -->
+  <div id="layer-middleware" class="layer">
+    <div class="layer-head">
+      <div class="layer-head-left">
+        <h2 class="layer-title">Middleware</h2>
+        <span class="layer-meta">Request pipeline · auth · role guards</span>
+      </div>
+    </div>
+
+    <div class="diagram-card" data-diagram-id="middleware">
+      <div class="card-head">
+        <span class="card-label">CORS → COOP → Auth guards → Route handler → Error handler</span>
+        <div class="card-actions">
+          <button class="act-btn" onclick="toggleMode('middleware',this)">Expand</button>
+          <button class="act-btn" onclick="openOverlay('middleware')">Fullscreen</button>
+        </div>
+      </div>
+      <div class="diagram-viewport" id="vp-middleware">
+        <div class="diagram-render" id="render-middleware">
+          <div class="vp-loading">Rendering</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Fullscreen overlay ──────────────────────────────────── -->
+<div id="overlay">
+  <div class="overlay-head">
+    <span class="overlay-label" id="overlay-label">Diagram</span>
+    <button class="overlay-close" onclick="closeOverlay()">Close ✕</button>
+  </div>
+  <div class="overlay-body">
+    <div id="overlay-svg-mount"></div>
+  </div>
+</div>
+
+<script>
+// ── Diagram source ──────────────────────────────────────────
+const diagrams = {
+  'user-journey': `flowchart TD
+    U([User arrives at the store])
+
+    subgraph STORE["Browsing the Store"]
+        direction TB
+        ST1[Products load on screen]
+        ST2[Open a product — images and details shown]
+        ST3[Add item to cart]
+        ST4[Cart drawer slides open — items listed]
+        ST5[Review cart and go to checkout]
+    end
+
+    subgraph CHKT["Placing an Order"]
+        direction TB
+        CK1[Enter name, address, and phone number]
+        CK2{How would you like to pay?}
+        CK3[Pay by card]
+        CK4[M-Pesa — payment prompt sent to phone]
+        CK5[Pay on delivery — account membership required]
+        CK6[Order confirmed — reference number shown]
+    end
+
+    subgraph ACCT["My Account"]
+        direction TB
+        AC1{Already have an account?}
+        AC2[Sign up with email and password]
+        AC3[Log in]
+        AC4[Dashboard — order history and loyalty tier shown]
+        AC5{Want to work here?}
+        AC6[Submit a staff role application]
+        AC7[Waiting — admin must approve your account]
+    end
+
+    subgraph STAFF["Staff Portals"]
+        direction TB
+        SP1[Delivery Agent — pick up shipped orders and confirm delivery]
+        SP2[Operator — view and monitor the order processing queue]
+        SP3[Marketing — view revenue analytics and VIP customer data]
+        SP4[Admin — manage products, staff, orders, tiers, and finances]
+    end
+
+    U --> ST1
+    ST1 --> ST2
+    ST2 --> ST3
+    ST3 --> ST4
+    ST4 --> ST5
+    ST5 --> CK1
+    CK1 --> CK2
+    CK2 -->|Card| CK3
+    CK2 -->|M-Pesa| CK4
+    CK2 -->|On delivery| CK5
+    CK3 --> CK6
+    CK4 --> CK6
+    CK5 --> CK6
+    U --> AC1
+    AC1 -->|Yes| AC3
+    AC1 -->|No| AC2
+    AC2 --> AC3
+    AC3 --> AC4
+    AC3 --> STAFF
+    AC4 --> CK5
+    AC4 --> AC5
+    AC5 -->|Yes| AC6
+    AC6 --> AC7`,
+
+  'frontend-app': `flowchart TD
+    U([Browser])
+    FB[("Firebase Auth Client SDK")]
+    API["Hono REST API port 3001"]
+
+    subgraph FE["Frontend — React 19 and TypeScript and Vite port 5173"]
+
+        subgraph CTX["Global Context Providers"]
+            direction LR
+            ACTX["AuthProvider: Firebase user state and role profile"]
+            CCTX["CartProvider: Session UUID and cart items"]
+        end
+
+        subgraph GUARD["Route Guards"]
+            direction TB
+            GA{AuthRoute: User signed in?}
+            GB{Guest allowed on this route?}
+            GC{Staff approved?}
+            GD{Role in allowedRoles?}
+            GPEN["PendingApproval screen: Staff awaiting admin review"]
+            GREDIR["Redirect to /login"]
+            GROLE["Redirect to role portal via getPortalPath"]
+        end
+
+        subgraph PUB["Public Routes — No Auth"]
+            direction TB
+            PU1["/ — Storefront: Product showcase and hero section"]
+            PU2["/product/:id — Product detail: Images, description, add to cart"]
+            PU3["/staff/signup — Staff application form"]
+        end
+
+        subgraph GUESTONLY["Guest-Only Routes — GuestRoute"]
+            direction TB
+            GU1["/login — Sign in with email and password"]
+            GU2["/signup — Create a new customer account"]
+        end
+
+        subgraph CUST["Customer Routes — AuthRoute"]
+            direction TB
+            CU1["/dashboard — Order history and loyalty tier (allowGuest, Customer role)"]
+            CU2["/profile — Edit account profile"]
+            CU3["/checkout — Cart review and payment (allowGuest, all roles)"]
+        end
+
+        subgraph PORTALS["Staff Portals — AuthRoute with Role"]
+            direction TB
+            PO1["/agent — Delivery Agent portal: DeliveryAgent role only"]
+            PO2["/operator — Operator portal: Operator, Manager, or Admin"]
+            PO3["/marketing — Marketing dashboard: Marketing, Manager, or Admin"]
+            PO4["/admin — Admin dashboard: Admin role only"]
+            PO5["/admin/products — Product catalogue CRUD: Admin role only"]
+        end
+
+    end
+
+    U --> PUB
+    U --> GUESTONLY
+    U --> GUARD
+    CTX -.-> FB
+    CTX -.-> API
+    PUB -.-> API
+    CUST -.-> API
+    PORTALS -.-> API
+    GA -->|Not signed in| GREDIR
+    GA -->|Signed in| GB
+    GB -->|Guest not allowed| GREDIR
+    GB -->|Guest or signed in| GC
+    GC -->|Not approved| GPEN
+    GC -->|Approved| GD
+    GD -->|Customer| CUST
+    GD -->|Staff role| PORTALS
+    GD -->|Wrong role| GROLE`,
+
+  'backend-api': `flowchart TD
+    U([API Client / Browser])
+    DB[("Firebase Firestore")]
+    MPESA["M-Pesa Daraja API: STK Push and Callback"]
+
+    subgraph BE["Backend — Hono on Node.js port 3001"]
+
+        subgraph PROD["Products"]
+            direction TB
+            PR1["GET /api/products: Return published storefront products only"]
+            PR2["GET /api/products/:id: Return single product or 404"]
+            PR3["GET /api/products/admin — adminAuthMiddleware: All products including drafts"]
+            PR4["POST /api/products — adminAuthMiddleware: Create new product"]
+            PR5["PUT /api/products/:id — adminAuthMiddleware: Update product fields"]
+            PR6["PATCH /api/products/:id/inventory — adminAuthMiddleware: Adjust stock count"]
+            PR7["POST /api/products/:id/duplicate — adminAuthMiddleware: Clone a product"]
+            PR8["DELETE /api/products/:id — adminAuthMiddleware: Archive soft delete"]
+        end
+
+        subgraph CART["Cart — session-based, no auth required"]
+            direction TB
+            CA1["GET /api/cart/:sessionId: Return items and totals"]
+            CA2["POST /api/cart/:sessionId: Add item or increment quantity"]
+            CA3["PUT /api/cart/:sessionId/:productId: Set item quantity, 0 removes it"]
+            CA4["DELETE /api/cart/:sessionId/:productId: Remove single item"]
+            CA5["DELETE /api/cart/:sessionId: Clear entire cart"]
+        end
+
+        subgraph CHKOUT["POST /api/checkout"]
+            direction TB
+            CO1["Validate items and stock against Firestore"]
+            CO2["Verify Firebase token if Authorization header present"]
+            CO3["Evaluate payment policy — tier, method, and balance"]
+            CO4{Payment method?}
+            CO5["Card: Create order, clear cart, award loyalty"]
+            CO6["M-Pesa: Create order, initiate STK push to phone, clear cart"]
+            CO7["PayOnDelivery: Create order, debit ledger if Gold tier or above, clear cart"]
+            CO8["400 — Invalid payload or unknown product"]
+            CO9["403 — COD not allowed for guest or this membership tier"]
+            CO10["409 — Insufficient stock"]
+        end
+
+        subgraph ORDERS["Orders"]
+            direction TB
+            OR1["GET /api/orders/:orderId: Auth by userId Bearer or sessionId query param"]
+            OR2["GET /api/orders/me — Bearer token: All orders for logged-in user"]
+            OR3["GET /api/orders/session/:sessionId: Guest order history by session UUID"]
+            OR4["POST /api/orders/:orderId/cancel: Customer cancel if not Shipped or later"]
+            OR5["POST /api/orders/:orderId/comment: Leave star rating and review on Delivered order"]
+            OR6["POST /api/orders/:orderId/pay: Repay COD outstanding balance"]
+            OR7["POST /api/orders/:orderId/mpesa-stk: Retrigger M-Pesa STK push for unpaid order"]
+            OR8["POST /api/payments/mpesa/callback: M-Pesa webhook — record payment receipt"]
+            OR9["POST /api/orders/:orderId/advance: Dev simulation — step order to next status"]
+            OR10["POST /api/orders/:orderId/customer-confirm: Customer confirms physical receipt"]
+        end
+
+        subgraph USER["User"]
+            direction TB
+            US1["GET /api/user/profile — Bearer token: Profile and tier progress"]
+            US2["POST /api/user/account/deposit — Bearer token: Topup ledger balance Gold plus only"]
+        end
+
+        subgraph DELIVERY["Delivery Agent"]
+            direction TB
+            DE1["GET /api/staff/available-orders — DeliveryAgent token: Shipped orders queue"]
+            DE2["POST /api/staff/orders/:orderId/accept — DeliveryAgent: Assign self, status becomes Out for Delivery"]
+            DE3["POST /api/staff/orders/:orderId/deliver — DeliveryAgent: Mark delivered, must be assigned agent"]
+            DE4["GET /api/staff/my-deliveries — Bearer token: Agent own active deliveries"]
+        end
+
+        subgraph OPQUEUE["Operator"]
+            direction TB
+            OP1["GET /api/operator/queue — checkOperator: Pending and Processing orders"]
+        end
+
+        subgraph MKT["Marketing"]
+            direction TB
+            MK1["GET /api/marketing/analytics — checkMarketing: Revenue summary and 8-week trend"]
+            MK2["GET /api/marketing/vip-users — checkMarketing: VIP user data, stub in dev"]
+        end
+
+        subgraph ADMIN["Admin"]
+            direction TB
+            AD1["GET /api/admin/orders — checkAdmin: All orders"]
+            AD2["GET /api/admin/financials — checkAdmin: P and L summary and metrics"]
+            AD3["GET /api/admin/staff — checkAdmin: Full staff directory"]
+            AD4["GET /api/admin/pending-staff — Admin Bearer: Pending role applications"]
+            AD5["POST /api/admin/approve-staff/:userId — Admin Bearer: Approve staff member"]
+            AD6["PATCH /api/admin/staff/:userId — checkAdmin: Update role, status, HR notes"]
+            AD7["PUT /api/admin/users/:userId/tier — checkAdmin: Manually set loyalty tier"]
+            AD8["PUT /api/admin/orders/:orderId/status — checkAdmin: Set status"]
+            AD9["POST /api/admin/orders/:orderId/finalize-delivery — checkAdmin: Final delivery confirmation"]
+            AD10["GET /api/admin/system-logs — Admin Bearer: In-memory system event log"]
+        end
+
+        subgraph STAFFREG["Staff Registration"]
+            direction TB
+            SR1["POST /api/staff/register — Bearer token: Submit role application"]
+        end
+
+    end
+
+    U -->|GET /api/products| PROD
+    U -->|Cart endpoints| CART
+    U -->|POST /api/checkout| CHKOUT
+    CO1 --> CO2
+    CO2 --> CO3
+    CO3 --> CO4
+    CO4 -->|Card| CO5
+    CO4 -->|Mpesa| CO6
+    CO4 -->|PayOnDelivery| CO7
+    CO6 -.-> MPESA
+    OR7 -.-> MPESA
+    OR8 -.-> MPESA
+    U -->|Order endpoints| ORDERS
+    U -->|User endpoints| USER
+    U -->|Staff endpoints| DELIVERY
+    U -->|Operator endpoint| OPQUEUE
+    U -->|Marketing endpoints| MKT
+    U -->|Admin endpoints| ADMIN
+    U -->|POST /api/staff/register| STAFFREG
+    PROD -.-> DB
+    CART -.-> DB
+    CHKOUT -.-> DB
+    ORDERS -.-> DB
+    USER -.-> DB
+    DELIVERY -.-> DB
+    ADMIN -.-> DB
+    STAFFREG -.-> DB`,
+
+  'middleware': `flowchart LR
+    REQ([Incoming Request])
+    ROUTE["Route Handler"]
+    ERR["onError: HTTPException maps to JSON with status code. Unknown errors map to 500."]
+
+    REQ --> COOP["COOP Header: Cross-Origin-Opener-Policy same-origin-allow-popups. Needed for Firebase Auth popups."]
+    COOP --> CORS["CORS: Allows localhost:5173, localhost:4173, localhost:3000, and *.onrender.com. Allows Authorization header and credentials."]
+    CORS --> SPLIT{Route type?}
+
+    SPLIT -->|Public route| ROUTE
+
+    SPLIT -->|adminAuthMiddleware — product write routes| AM1["Extract Bearer token from Authorization header"]
+    AM1 --> AM2["auth.verifyIdToken via Firebase Admin SDK"]
+    AM2 --> AM3{Admin role in Firestore?}
+    AM3 -->|Yes| ROUTE
+    AM3 -->|Wrong role| AM4["403 Forbidden: Admin access required"]
+    AM3 -->|Token invalid| AM5["401 Unauthorized: Invalid token"]
+    AM3 -->|Config mismatch| AM6["503 Service Unavailable: Firebase config mismatch between client and server"]
+
+    SPLIT -->|checkAdmin — admin API routes| CKA["Extract Bearer token, verify, check Admin role"]
+    CKA -->|Valid Admin| ROUTE
+    CKA -->|Not Admin| CKAF["403 Forbidden: Admin access required"]
+    CKA -->|Token error| CKAE["401 Unauthorized"]
+
+    SPLIT -->|checkOperator — operator queue| CKO["Extract Bearer token, verify, check role"]
+    CKO -->|Operator or Manager or Admin| ROUTE
+    CKO -->|Wrong role| CKOF["403 Operator access required"]
+    CKO -->|Token error| CKOE["401 Unauthorized"]
+
+    SPLIT -->|checkMarketing — marketing routes| CKM["Extract Bearer token, verify, check role"]
+    CKM -->|Marketing or Manager or Admin| ROUTE
+    CKM -->|Wrong role| CKMF["403 Marketing access required"]
+    CKM -->|Token error| CKME["401 Unauthorized"]
+
+    ROUTE --> ERR`
+};
+
+// ── Layer → diagrams map ─────────────────────────────────────
+const layerDiagrams = {
+  'user-journey':  ['user-journey'],
+  'backend-flow':  ['frontend-app', 'backend-api'],
+  'middleware':    ['middleware']
+};
+
+// ── Mermaid init ─────────────────────────────────────────────
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  themeVariables: {
+    darkMode: true,
+    background:         '#0a0a0a',
+    primaryColor:       '#1a1510',
+    primaryTextColor:   '#e8e2d5',
+    primaryBorderColor: '#c9a227',
+    lineColor:          '#c9a227',
+    secondaryColor:     '#161616',
+    secondaryTextColor: '#e8e2d5',
+    secondaryBorderColor:'rgba(201,162,39,0.35)',
+    tertiaryColor:      '#111111',
+    tertiaryTextColor:  '#e8e2d5',
+    tertiaryBorderColor:'rgba(201,162,39,0.2)',
+    mainBkg:            '#111111',
+    nodeBorder:         '#c9a227',
+    clusterBkg:         '#0f0d09',
+    clusterBorder:      'rgba(201,162,39,0.22)',
+    titleColor:         '#c9a227',
+    edgeLabelBackground:'#0a0a0a',
+    fontFamily:         'Inter, system-ui, sans-serif',
+    fontSize:           '13px',
+    labelBackground:    '#0f0d09',
+  }
+});
+
+// ── State ────────────────────────────────────────────────────
+const rendered  = new Set();
+const diagState = {};
+
+// ── Render a diagram ─────────────────────────────────────────
+async function renderDiagram(id) {
+  if (rendered.has(id)) return;
+  const renderEl = document.getElementById('render-' + id);
+  const vpEl     = document.getElementById('vp-' + id);
+  const code     = diagrams[id];
+  if (!renderEl || !vpEl || !code) return;
+
+  renderEl.innerHTML = '<div class="vp-loading">Rendering</div>';
+
+  try {
+    const uid = 'mmd-' + id.replace(/[^a-z0-9]/gi,'-') + '-' + Date.now();
+    const { svg } = await mermaid.render(uid, code.trim());
+    renderEl.innerHTML = svg;
+
+    const svgEl = renderEl.querySelector('svg');
+    if (svgEl) {
+      // Extract natural dimensions from viewBox
+      const vb = (svgEl.getAttribute('viewBox') || '').trim().split(/[\s,]+/).map(Number);
+      const vbW = vb[2] || 0;
+      const vbH = vb[3] || 0;
+
+      if (vbW > 0 && vbH > 0) {
+        // Set natural pixel size so transform-scale works correctly
+        svgEl.removeAttribute('width');
+        svgEl.setAttribute('height', vbH + 'px');
+        svgEl.style.width    = vbW + 'px';
+        svgEl.style.maxWidth = 'none';
+        diagState[id] = { vbW, vbH, expanded: false };
+      }
+    }
+
+    rendered.add(id);
+    applyFit(id);           // default: fit to container
+  } catch (err) {
+    renderEl.innerHTML = `<div class="vp-error">Could not render diagram:\n${err.message || err}</div>`;
+  }
+}
+
+// ── Fit mode: scale so full height is visible, scroll horizontally ─
+function applyFit(id) {
+  const renderEl = document.getElementById('render-' + id);
+  const vpEl     = document.getElementById('vp-' + id);
+  const state    = diagState[id];
+  if (!renderEl || !vpEl || !state) return;
+
+  const { vbW, vbH } = state;
+  const pad    = 48; // 24px × 2 padding
+  const availW = vpEl.clientWidth  - pad;
+  const maxH   = Math.min(window.innerHeight * 0.68, 720);
+
+  // Pick the scale that fills the viewport height (gives best readability).
+  // Never scale above 1 (no upscaling), never below 0.05 (remain legible enough to scroll).
+  const scaleByH = maxH / vbH;
+  const scaleByW = availW / vbW;
+  const scale    = Math.min(1, Math.max(scaleByH, scaleByW));
+
+  const scaledW = Math.round(vbW * scale);
+  const scaledH = Math.round(vbH * scale);
+
+  renderEl.style.transform       = `scale(${scale})`;
+  renderEl.style.transformOrigin = 'top left';
+
+  // Height: clamp so viewport never exceeds maxH
+  const vpH = Math.min(scaledH + pad, maxH + pad);
+  vpEl.style.height   = vpH + 'px';
+  vpEl.style.overflow = 'auto';
+
+  // Show edge-fade hint when content is wider than container
+  if (scaledW > availW) {
+    vpEl.classList.add('has-overflow');
+  } else {
+    vpEl.classList.remove('has-overflow');
+  }
+
+  state.expanded = false;
+}
+
+// ── Expand mode: natural 1:1 size, full scroll ────────────────
+function applyExpand(id) {
+  const renderEl = document.getElementById('render-' + id);
+  const vpEl     = document.getElementById('vp-' + id);
+  const state    = diagState[id];
+  if (!renderEl || !vpEl || !state) return;
+
+  const { vbH } = state;
+  const maxH    = Math.round(window.innerHeight * 0.82);
+
+  renderEl.style.transform = '';
+  vpEl.style.height        = Math.min(vbH + 48, maxH) + 'px';
+  vpEl.style.overflow      = 'auto';
+  vpEl.classList.add('has-overflow');
+  state.expanded = true;
+}
+
+// ── Toggle fit / expand ───────────────────────────────────────
+function toggleMode(id, btn) {
+  const state = diagState[id];
+  if (!state) return;
+  if (state.expanded) {
+    applyFit(id);
+    btn.textContent = 'Expand';
+    btn.classList.remove('on');
+  } else {
+    applyExpand(id);
+    btn.textContent = 'Fit';
+    btn.classList.add('on');
+  }
+}
+
+// ── Fullscreen overlay ────────────────────────────────────────
+const overlayLabels = {
+  'user-journey':  'User Journey — End-to-end user flow',
+  'frontend-app':  'Frontend — React 19 · Vite · TypeScript',
+  'backend-api':   'Backend API — Hono · Node.js · Firebase Firestore',
+  'middleware':    'Middleware — Auth pipeline'
+};
+
+function openOverlay(id) {
+  const state = diagState[id];
+  if (!state) return;
+  const { vbW, vbH } = state;
+  const mount = document.getElementById('overlay-svg-mount');
+  const label = document.getElementById('overlay-label');
+
+  // Clone the rendered SVG into the overlay
+  const src = document.getElementById('render-' + id).querySelector('svg');
+  if (!src) return;
+  const clone = src.cloneNode(true);
+  clone.style.width    = vbW + 'px';
+  clone.style.height   = vbH + 'px';
+  clone.style.maxWidth = 'none';
+  clone.style.transform = '';
+  mount.innerHTML = '';
+  mount.appendChild(clone);
+
+  label.textContent = overlayLabels[id] || id;
+  document.getElementById('overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeOverlay() {
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('overlay-svg-mount').innerHTML = '';
+  document.body.style.overflow = '';
+}
+
+// ── Show layer ────────────────────────────────────────────────
+async function showLayer(name, btn) {
+  document.querySelectorAll('.layer').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('#layer-nav button').forEach(b => b.classList.remove('active'));
+
+  const layer = document.getElementById('layer-' + name);
+  if (layer) layer.classList.add('active');
+  if (btn) btn.classList.add('active');
+
+  // Update breadcrumb
+  const crumbName = document.getElementById('crumb-name');
+  const idx = btn ? btn.dataset.idx : '1';
+  if (crumbName) crumbName.textContent = btn ? btn.textContent : name;
+  const crumb = document.getElementById('crumb');
+  if (crumb) {
+    const total = document.querySelectorAll('#layer-nav button').length;
+    crumb.innerHTML = `Layer <span id="crumb-name">${btn ? btn.textContent : name}</span> &nbsp;·&nbsp; ${idx} / ${total}`;
+  }
+
+  const ids = layerDiagrams[name] || [];
+  for (const id of ids) await renderDiagram(id);
+}
+
+// ── Re-fit on window resize ───────────────────────────────────
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    for (const [id, st] of Object.entries(diagState)) {
+      if (!st.expanded) applyFit(id);
+      else applyExpand(id);
+    }
+  }, 150);
+});
+
+// ── ESC closes overlay ────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeOverlay();
+});
+
+// ── Init ──────────────────────────────────────────────────────
+showLayer('user-journey', document.querySelector('[data-layer="user-journey"]'));
+</script>
+</body>
+</html>

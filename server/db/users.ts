@@ -1,5 +1,6 @@
 import { db, canUseFirestore, disableFirestore } from "./firebase.js";
 import type { EmploymentStatus, UserProfile, UserRole, UserTier } from "../types.js";
+import { calculateLoyaltyPoints, resolveTier } from "../lib/membership.js";
 
 const memoryProfiles = new Map<string, UserProfile>();
 
@@ -28,11 +29,28 @@ function getEmploymentStatus(role: UserRole, isApproved: boolean): EmploymentSta
   return isApproved ? "Active" : "PendingApproval";
 }
 
+function applyTierProgress(profile: UserProfile): UserProfile {
+  if (!profile.tierManualOverride) {
+    profile.tier = resolveTier(profile.totalSpent ?? 0, profile.completedOrderCount ?? 0);
+  }
+  profile.lastTierEvaluatedAt = new Date().toISOString();
+  return profile;
+}
+
 function normalizeProfile(profile: UserProfile): UserProfile {
-  return {
+  const normalized = {
     ...profile,
     accountBalance: Number((profile.accountBalance ?? 0).toFixed(2)),
+    totalSpent: Number((profile.totalSpent ?? 0).toFixed(2)),
+    points: Number((profile.points ?? 0).toFixed(2)),
+    completedOrderCount: Math.max(0, Math.floor(profile.completedOrderCount ?? 0)),
+    hrNotes: profile.hrNotes ?? "",
+    department: profile.department,
+    role: profile.role ?? "Customer",
+    tier: (profile.tier ?? "Junior") as UserTier,
+    employmentStatus: (profile.employmentStatus ?? "Active") as EmploymentStatus,
   };
+  return applyTierProgress(normalized);
 }
 
 async function withUsersFallback<T>(action: () => Promise<T>, fallback: () => T | Promise<T>): Promise<T> {
@@ -57,23 +75,30 @@ function getOrCreateMemoryProfile(userId: string, email?: string): UserProfile {
     profile = {
       userId,
       email: email || "",
-      tier: isAdmin ? "The Alchemist Circle" : "Junior",
+      tier: isAdmin ? "Black" : "Junior",
       role: isAdmin ? "Admin" : "Customer",
       isApproved: isAdmin,
       points: isAdmin ? 999999 : 0,
       totalSpent: 0,
+      completedOrderCount: isAdmin ? 999 : 0,
       accountBalance: 0,
       joinedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       employmentStatus: getEmploymentStatus(isAdmin ? "Admin" : "Customer", isAdmin),
       department: isAdmin ? "Executive" : undefined,
       hrNotes: "",
       lastRoleUpdatedAt: new Date().toISOString(),
     };
     memoryProfiles.set(userId, profile);
-  } else if (isAdmin && (!profile.isApproved || profile.role !== "Admin")) {
+  } else if (email && profile.email !== email) {
+    profile.email = email;
+    memoryProfiles.set(userId, profile);
+  }
+
+  if (profile && isAdmin && (!profile.isApproved || profile.role !== "Admin")) {
     profile.isApproved = true;
     profile.role = "Admin";
-    profile.tier = "The Alchemist Circle";
+    profile.tier = "Black";
     profile.employmentStatus = "Active";
     profile.department = profile.department || "Executive";
     profile.lastRoleUpdatedAt = new Date().toISOString();
@@ -94,32 +119,50 @@ export async function getUserProfile(userId: string, email?: string): Promise<Us
       const doc = await usersCollection.doc(userId).get();
       if (doc.exists) {
         const profile = normalizeProfile(doc.data() as UserProfile);
+        const updates: Partial<UserProfile> = {};
+
+        if (email && profile.email !== email) {
+          profile.email = email;
+          updates.email = email;
+        }
+
         if (isAdmin && (!profile.isApproved || profile.role !== "Admin")) {
           profile.isApproved = true;
           profile.role = "Admin";
-          profile.tier = "The Alchemist Circle";
-          await usersCollection.doc(userId).update({
+          profile.tier = "Black";
+          profile.employmentStatus = "Active";
+          profile.department = profile.department || "Executive";
+          profile.lastRoleUpdatedAt = new Date().toISOString();
+
+          Object.assign(updates, {
             isApproved: true,
             role: "Admin",
-            tier: "The Alchemist Circle",
+            tier: "Black",
             employmentStatus: "Active",
             department: profile.department || "Executive",
-            lastRoleUpdatedAt: new Date().toISOString(),
+            lastRoleUpdatedAt: profile.lastRoleUpdatedAt,
           });
         }
+
+        if (Object.keys(updates).length > 0) {
+          await usersCollection.doc(userId).update(updates);
+        }
+
         return profile;
       }
 
       const newProfile: UserProfile = {
         userId,
         email: email || "",
-        tier: isAdmin ? "The Alchemist Circle" : "Junior",
+        tier: isAdmin ? "Black" : "Junior",
         role: isAdmin ? "Admin" : "Customer",
         isApproved: isAdmin,
         points: isAdmin ? 999999 : 0,
         totalSpent: 0,
+        completedOrderCount: isAdmin ? 999 : 0,
         accountBalance: 0,
         joinedAt: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
         employmentStatus: getEmploymentStatus(isAdmin ? "Admin" : "Customer", isAdmin),
         department: isAdmin ? "Executive" : undefined,
         hrNotes: "",
@@ -139,7 +182,8 @@ export async function registerStaffApplication(userId: string, email: string, ro
   const profile = await getUserProfile(userId, email);
   profile.role = isAdmin ? "Admin" : role;
   profile.isApproved = isAdmin; // Admin is auto-approved, others must wait
-  profile.tier = isAdmin ? "The Alchemist Circle" : "Junior";
+  // Preserve existing loyalty tier for non-admin staff; only elevate admins
+  profile.tier = isAdmin ? "Black" : profile.tier;
   profile.employmentStatus = getEmploymentStatus(profile.role, profile.isApproved);
   profile.department = profile.department || (profile.role === "Customer" ? undefined : "General");
   profile.lastRoleUpdatedAt = new Date().toISOString();
@@ -292,17 +336,9 @@ export async function updateStaffProfile(
 export async function updateUserSpent(userId: string, amount: number): Promise<UserProfile> {
   const profile = await getUserProfile(userId);
   profile.totalSpent = Math.max(0, Number((profile.totalSpent + amount).toFixed(2)));
-  profile.points = Math.max(0, Number((profile.points + amount * 0.05).toFixed(2)));
-
-  // Update tier based on spending
-  if (profile.tier !== "The Alchemist Circle") {
-    if (profile.totalSpent >= 5000) profile.tier = "Diamond";
-    else if (profile.totalSpent >= 2500) profile.tier = "Platinum";
-    else if (profile.totalSpent >= 1000) profile.tier = "Gold";
-    else if (profile.totalSpent >= 500) profile.tier = "Silver";
-    else if (profile.totalSpent > 0) profile.tier = "Bronze";
-    else profile.tier = "Junior";
-  }
+  profile.points = Math.max(0, Number((profile.points + calculateLoyaltyPoints(amount, profile.tier)).toFixed(2)));
+  profile.completedOrderCount = Math.max(0, (profile.completedOrderCount ?? 0) + (amount >= 0 ? 1 : -1));
+  applyTierProgress(profile);
 
   if (!usersCollection || !canUseFirestore()) {
     memoryProfiles.set(userId, profile);
@@ -315,6 +351,8 @@ export async function updateUserSpent(userId: string, amount: number): Promise<U
         totalSpent: profile.totalSpent,
         points: profile.points,
         tier: profile.tier,
+        completedOrderCount: profile.completedOrderCount,
+        lastTierEvaluatedAt: profile.lastTierEvaluatedAt,
       });
       return normalizeProfile(profile);
     },
@@ -351,6 +389,8 @@ export async function adjustUserAccountBalance(userId: string, delta: number): P
 export async function setSpecialTier(userId: string, tier: UserTier): Promise<UserProfile> {
   const profile = await getUserProfile(userId);
   profile.tier = tier;
+  profile.tierManualOverride = true;
+  profile.lastTierEvaluatedAt = new Date().toISOString();
 
   if (!usersCollection || !canUseFirestore()) {
     memoryProfiles.set(userId, profile);
@@ -359,7 +399,11 @@ export async function setSpecialTier(userId: string, tier: UserTier): Promise<Us
 
   return withUsersFallback(
     async () => {
-      await usersCollection.doc(userId).update({ tier: profile.tier });
+      await usersCollection.doc(userId).update({
+        tier: profile.tier,
+        tierManualOverride: true,
+        lastTierEvaluatedAt: profile.lastTierEvaluatedAt,
+      });
       return normalizeProfile(profile);
     },
     () => {
@@ -368,3 +412,4 @@ export async function setSpecialTier(userId: string, tier: UserTier): Promise<Us
     }
   );
 }
+

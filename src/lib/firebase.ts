@@ -1,5 +1,5 @@
 import { initializeApp, type FirebaseApp } from "firebase/app";
-import { getAuth, type Auth } from "firebase/auth";
+import { browserLocalPersistence, getAuth, setPersistence, type Auth } from "firebase/auth";
 
 const rawApiKey = import.meta.env.VITE_FIREBASE_API_KEY;
 const rawProjectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
@@ -32,6 +32,11 @@ try {
   if (hasRealConfig) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
+    void setPersistence(auth, browserLocalPersistence).catch((err) => {
+      if (import.meta.env.DEV) {
+        console.warn("[Firebase] Failed to set auth persistence:", err instanceof Error ? err.message : err);
+      }
+    });
   } else if (import.meta.env.DEV) {
     console.warn(
       "[Firebase] Client config contains placeholder values. Auth features will be unavailable. " +

@@ -7,6 +7,7 @@ import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
 import { TierBadge } from "@/components/ui/TierBadge";
 import type { Order } from "../../server/types";
+import { getTierPolicy } from "@/utils/membership";
 
 export default function Dashboard() {
   const { user, profile, logout, isGuest, getIdToken, refreshProfile, loading: authLoading } = useAuth();
@@ -22,9 +23,13 @@ export default function Dashboard() {
   const [requestingPromptId, setRequestingPromptId] = useState<number | null>(null);
   const [payingOrderId, setPayingOrderId] = useState<number | null>(null);
   const [requestingMpesaId, setRequestingMpesaId] = useState<number | null>(null);
+  const [cancellingOrderId, setCancellingOrderId] = useState<number | null>(null);
   const [mpesaPhone, setMpesaPhone] = useState<Record<number, string>>({});
   const [depositAmount, setDepositAmount] = useState("");
   const [depositing, setDepositing] = useState(false);
+  const tierPolicy = profile ? getTierPolicy(profile.tier) : null;
+  const canUseLedgerAccount = !!tierPolicy?.canUseLedger;
+  const canDepositToLedger = canUseLedgerAccount && (tierPolicy?.rank ?? 0) >= getTierPolicy("Gold").rank;
 
   useEffect(() => {
     // Role-based redirection for approved staff
@@ -280,6 +285,28 @@ export default function Dashboard() {
     }
   };
 
+  const handleCancelOrder = async (order: Order) => {
+    setCancellingOrderId(order.orderId);
+    try {
+      const { headers, suffix } = await buildOrderAccess();
+      const res = await fetch(`/api/orders/${order.orderId}/customer-cancel${suffix}`, {
+        method: "POST",
+        headers,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Unable to cancel order");
+      setOrders((prev) => prev.map((entry) => (entry.orderId === order.orderId ? data.order : entry)));
+      if (user) {
+        await refreshProfile();
+      }
+      toast.success(`Order #${order.orderId} cancelled.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Unable to cancel order");
+    } finally {
+      setCancellingOrderId(null);
+    }
+  };
+
   const handleReorder = async (order: Order) => {
     try {
       for (const item of order.items) {
@@ -390,10 +417,14 @@ export default function Dashboard() {
                 <>
                   <Sparkles className="w-6 h-6 text-primary mx-auto mb-2" />
                   <p className={`text-2xl font-serif font-bold ${(profile.accountBalance ?? 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                    ${Math.abs(profile.accountBalance ?? 0).toFixed(2)}
+                    {canUseLedgerAccount ? `$${Math.abs(profile.accountBalance ?? 0).toFixed(2)}` : profile.tier}
                   </p>
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">
-                    {(profile.accountBalance ?? 0) >= 0 ? "Account Balance" : "Account Credit Owed"}
+                    {canUseLedgerAccount
+                      ? (profile.accountBalance ?? 0) >= 0
+                        ? "Account Balance"
+                        : "Account Credit Owed"
+                      : "Delivery-Only Tier"}
                   </p>
                 </>
               ) : (
@@ -429,13 +460,13 @@ export default function Dashboard() {
                 <div>
                   <h2 className="font-serif text-xl font-bold">Account Balance</h2>
                   <p className="text-xs text-muted-foreground">
-                    Silver tier and above can use account credit at checkout. Bronze pays a 50% delivery deposit. Junior has no delivery credit yet.
+                    Ledger access begins at Silver. Bronze supports COD without ledger debt. Gold and above support full credit handling.
                   </p>
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Current Balance</p>
                   <p className={`text-2xl font-serif font-bold ${(profile.accountBalance ?? 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                    ${(profile.accountBalance ?? 0).toFixed(2)}
+                    {canUseLedgerAccount ? `$${(profile.accountBalance ?? 0).toFixed(2)}` : "Unavailable"}
                   </p>
                 </div>
               </div>
@@ -446,19 +477,24 @@ export default function Dashboard() {
                   step="0.01"
                   value={depositAmount}
                   onChange={(e) => setDepositAmount(e.target.value)}
-                  placeholder="Add funds to your account"
+                  placeholder={canDepositToLedger ? "Add funds to your account" : "Ledger deposits unlock at Gold"}
+                  disabled={!canDepositToLedger}
                   className="flex-1 bg-background border border-border px-3 py-2 text-sm focus:outline-none focus:border-primary transition-colors"
                 />
                 <button
                   onClick={handleDeposit}
-                  disabled={depositing}
+                  disabled={depositing || !canDepositToLedger}
                   className="px-4 py-2 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light disabled:opacity-50"
                 >
                   {depositing ? "Adding..." : "Add Funds"}
                 </button>
               </div>
               <p className="text-[10px] text-muted-foreground">
-                Positive balances are prepaid deposits. Negative balances show purchases taken on account and still to be settled.
+                {canUseLedgerAccount
+                  ? `Positive balances are prepaid deposits. Negative balances are outstanding ledger debt. Outstanding ceiling: ${
+                      tierPolicy?.maxOutstandingBalance == null ? "Unlimited (Black tier)" : `$${tierPolicy.maxOutstandingBalance.toFixed(2)}`
+                    }.`
+                  : "Junior and Bronze accounts cannot preload funds or use wallet-style credit."}
               </p>
             </div>
           )}
@@ -560,9 +596,9 @@ export default function Dashboard() {
                             <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Payment</p>
                             <p className="text-sm">
                               {order.paymentMethod === "PayOnDelivery"
-                                ? order.paymentReference === "BRONZE-50PCT-DEPOSIT"
-                                  ? "Bronze Delivery Deposit"
-                                  : "Account Balance / Credit"
+                                ? order.paymentReference === "PAY_AFTER_DELIVERY"
+                                  ? "Pay After Delivery"
+                                  : "Running Balance / Credit"
                                 : order.paymentMethod === "Mpesa"
                                   ? "M-Pesa STK Push"
                                   : "Card"}
@@ -571,9 +607,9 @@ export default function Dashboard() {
                               <div className="space-y-1 text-xs text-muted-foreground">
                                 <p>Paid ${order.amountPaid.toFixed(2)} of ${order.total.toFixed(2)}. Remaining: ${order.amountDue.toFixed(2)}.</p>
                                 <p>
-                                  {order.paymentReference === "BRONZE-50PCT-DEPOSIT"
-                                    ? "Bronze orders require the full remaining balance before admin finalization."
-                                    : "Silver tier and above use a running account balance instead of per-order partial payments."}
+                                  {order.paymentReference === "PAY_AFTER_DELIVERY"
+                                    ? "This order settles at delivery completion without ledger debt."
+                                    : "This order used the member ledger account for deferred balance handling."}
                                 </p>
                               </div>
                             )}
@@ -649,6 +685,24 @@ export default function Dashboard() {
                           </div>
                         </div>
 
+                        {["Pending", "Processing"].includes(order.status) && (
+                          <div className="rounded border border-amber-500/20 bg-amber-500/5 p-4 space-y-3">
+                            <div>
+                              <p className="text-[10px] tracking-widest uppercase font-bold text-amber-500">Cancellation Window Open</p>
+                              <p className="mt-2 text-xs text-muted-foreground">
+                                Orders can be cancelled before dispatch. Any reserved inventory and qualifying balance charges will be reversed automatically.
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleCancelOrder(order)}
+                              disabled={cancellingOrderId === order.orderId}
+                              className="px-4 py-2 border border-amber-500/30 text-amber-500 text-[10px] tracking-widest uppercase font-bold hover:bg-amber-500/10 disabled:opacity-50"
+                            >
+                              {cancellingOrderId === order.orderId ? "Cancelling..." : "Cancel Order"}
+                            </button>
+                          </div>
+                        )}
+
                         {order.paymentMethod === "PayOnDelivery" && order.status !== "Cancelled" && (
                           <div className="space-y-3 border border-border/50 rounded p-4">
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -656,7 +710,7 @@ export default function Dashboard() {
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Payment Features</p>
                                 <p className="text-xs text-muted-foreground">
                                   Status: {order.paymentStatus}. Prompt requests: {order.paymentPromptCount || 0}
-                                  {order.payOnDeliveryLimit ? ` • Tier limit: $${order.payOnDeliveryLimit.toFixed(2)}` : ""}
+                                  {order.payOnDeliveryLimit ? ` • Outstanding limit: $${order.payOnDeliveryLimit.toFixed(2)}` : ""}
                                 </p>
                               </div>
                               {order.amountDue > 0 && (

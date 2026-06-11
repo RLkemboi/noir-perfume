@@ -1,0 +1,72 @@
+flowchart TD
+    U([Browser])
+    FB[("Firebase Auth\nClient SDK")]
+    API["Hono REST API\nport 3001"]
+
+    subgraph FE["Frontend — React 19 + TypeScript + Vite (port 5173)"]
+
+        subgraph CTX["Global Context Providers"]
+            direction LR
+            ACTX["AuthProvider\nFirebase user state + role profile\nfetched from GET /api/user/profile"]
+            CCTX["CartProvider\nSession UUID + cart items\nsessionId stored in localStorage"]
+        end
+
+        subgraph GUARD["Route Guards"]
+            direction TB
+            GA{AuthRoute\nUser signed in?}
+            GB{Guest allowed\non this route?}
+            GC{Staff approved\nisApproved flag?}
+            GD{Role in\nallowedRoles?}
+            GPEN["PendingApproval screen\nStaff awaiting admin review"]
+            GREDIR["Redirect → /login"]
+            GROLE["Redirect → role portal\ngetPortalPath(profile)"]
+        end
+
+        subgraph PUB["Public Routes — No Auth"]
+            direction TB
+            PU1["/ — Storefront\nProduct showcase and hero section"]
+            PU2["/product/:id — Product detail\nImages, description, add to cart"]
+            PU3["/staff/signup — Staff application\nOpen registration form"]
+        end
+
+        subgraph GUESTONLY["Guest-Only Routes — GuestRoute"]
+            direction TB
+            GU1["/login — Sign in with email and password"]
+            GU2["/signup — Create a new customer account"]
+        end
+
+        subgraph CUST["Customer Routes — AuthRoute"]
+            direction TB
+            CU1["/dashboard — Order history + loyalty tier\nallowGuest, Customer role"]
+            CU2["/profile — Edit account profile"]
+            CU3["/checkout — Cart review + payment\nallowGuest, all roles"]
+        end
+
+        subgraph PORTALS["Staff Portals — AuthRoute with Role"]
+            direction TB
+            PO1["/agent — Delivery Agent portal\nDeliveryAgent role only"]
+            PO2["/operator — Operator portal\nOperator, Manager, or Admin"]
+            PO3["/marketing — Marketing dashboard\nMarketing, Manager, or Admin"]
+            PO4["/admin — Admin dashboard\nAdmin role only"]
+            PO5["/admin/products — Product catalogue CRUD\nAdmin role only"]
+        end
+
+    end
+
+    U --> PUB
+    U --> GUESTONLY
+    U --> GUARD
+    CTX -.-> FB
+    CTX -.-> API
+    PUB -.-> API
+    CUST -.-> API
+    PORTALS -.-> API
+    GA -->|Not signed in| GREDIR
+    GA -->|Signed in| GB
+    GB -->|Guest not allowed| GREDIR
+    GB -->|Guest or signed in| GC
+    GC -->|Not approved| GPEN
+    GC -->|Approved| GD
+    GD -->|Customer| CUST
+    GD -->|Staff role| PORTALS
+    GD -->|Wrong role| GROLE

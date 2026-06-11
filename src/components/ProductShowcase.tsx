@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, Clock, Volume2, ShieldCheck, Gem, History, ArrowUpRight } from "lucide-react";
-import { products, brands, collections, type Product } from "@/data";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { MarqueeBand } from "./MarqueeBand";
+import { useStorefrontProducts } from "@/hooks/useStorefrontProducts";
+import type { StorefrontProduct as Product } from "@/utils/storefrontProductAdapter";
 
 const Meter = ({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) => (
   <div className="space-y-1.5">
@@ -159,6 +160,7 @@ const ProductCard = ({ product, index }: { product: Product; index: number }) =>
 const ProductShowcase = () => {
   const [activeBrand, setActiveBrand] = useState<string | null>(null);
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
+  const { products, brands, collections, isLoading } = useStorefrontProducts();
 
   const filtered = products.filter((p) => {
     const brandMatch = activeBrand ? p.brand === activeBrand : true;
@@ -211,14 +213,18 @@ const ProductShowcase = () => {
           layout
           className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6"
         >
-          <AnimatePresence mode='popLayout'>
-            {filtered.map((product, i) => (
-              <ProductCard key={product.id} product={product} index={i} />
-            ))}
-          </AnimatePresence>
+          {isLoading ? (
+            <div className="col-span-full py-16 text-center text-sm text-muted-foreground">Loading catalogue...</div>
+          ) : (
+            <AnimatePresence mode='popLayout'>
+              {filtered.map((product, i) => (
+                <ProductCard key={product.id} product={product} index={i} />
+              ))}
+            </AnimatePresence>
+          )}
         </motion.div>
 
-        {filtered.length === 0 && (
+        {!isLoading && filtered.length === 0 && (
           <motion.div 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}

@@ -36,8 +36,11 @@ export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { addItem } = useCart();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [remote, setRemote] = useState<{ id: string; product: Product | null } | null>(null);
+
+  const localProduct = products.find((p) => p.id === id) ?? null;
+  const product = localProduct ?? (remote && remote.id === id ? remote.product : null);
+  const loading = !localProduct && !!id && remote?.id !== id;
 
   useSEO(
     product
@@ -53,27 +56,26 @@ export default function ProductDetail() {
   );
 
   useEffect(() => {
-    const local = products.find((p) => p.id === id);
-    if (local) {
-      setProduct(local);
-      setLoading(false);
-      return;
-    }
+    if (!id || products.some((p) => p.id === id)) return;
 
+    let cancelled = false;
     fetch(`/api/products/${id}`)
       .then((res) => {
         if (!res.ok) throw new Error("Product not found");
         return res.json();
       })
       .then((data) => {
-        setProduct(data.product);
+        if (!cancelled) setRemote({ id, product: data.product });
       })
       .catch(() => {
+        if (cancelled) return;
+        setRemote({ id, product: null });
         toast.error("Product not found");
-      })
-      .finally(() => {
-        setLoading(false);
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const handleAdd = () => {

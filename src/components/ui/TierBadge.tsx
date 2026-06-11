@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Crown, Sparkles, Diamond, Shield, Award, Zap } from "lucide-react";
+import { Crown, Shield, Award, Sparkles, Gem, Medal, type LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { UserProfile } from "../../../server/types";
 
@@ -11,17 +11,17 @@ interface TierBadgeProps {
   showIcon?: boolean;
 }
 
-const TIER_CONFIG: Record<UserTier, { color: string; icon: any; label: string; bg: string }> = {
+const TIER_CONFIG: Record<UserTier, { color: string; icon: LucideIcon; label: string; bg: string }> = {
   Junior: {
     color: "text-stone-400",
     bg: "bg-stone-400/10 border-stone-400/20",
-    icon: Zap,
+    icon: Shield,
     label: "Junior Member",
   },
   Bronze: {
-    color: "text-amber-700",
-    bg: "bg-amber-700/10 border-amber-700/20",
-    icon: Zap,
+    color: "text-amber-500",
+    bg: "bg-amber-500/10 border-amber-500/20",
+    icon: Medal,
     label: "Bronze Member",
   },
   Silver: {
@@ -37,27 +37,21 @@ const TIER_CONFIG: Record<UserTier, { color: string; icon: any; label: string; b
     label: "Gold Member",
   },
   Platinum: {
-    color: "text-cyan-400",
-    bg: "bg-cyan-400/10 border-cyan-400/20",
-    icon: Sparkles,
-    label: "Platinum Member",
-  },
-  Diamond: {
-    color: "text-blue-400",
-    bg: "bg-blue-400/10 border-blue-400/20",
-    icon: Diamond,
-    label: "Diamond Elite",
-  },
-  "The Alchemist Circle": {
     color: "text-primary",
     bg: "bg-primary/10 border-primary/20 luxury-glow",
-    icon: Shield,
-    label: "The Alchemist Circle",
+    icon: Gem,
+    label: "Platinum Member",
+  },
+  Black: {
+    color: "text-zinc-100",
+    bg: "bg-zinc-950/70 border-zinc-700",
+    icon: Sparkles,
+    label: "Black Member",
   },
 };
 
 export function TierBadge({ tier, className, showIcon = true }: TierBadgeProps) {
-  const config = TIER_CONFIG[tier] || TIER_CONFIG.Bronze;
+  const config = TIER_CONFIG[tier] || TIER_CONFIG.Junior;
   const Icon = config.icon;
 
   return (

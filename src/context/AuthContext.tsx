@@ -1,253 +1,302 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
-import type { User } from "firebase/auth";
-import type { UserProfile } from "../../server/types";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
-  onAuthStateChanged,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut,
-  sendPasswordResetEmail,
-  sendEmailVerification,
-  updateProfile,
-  updateEmail,
-  updatePassword,
-  reauthenticateWithCredential,
   EmailAuthProvider,
   GoogleAuthProvider,
   OAuthProvider,
+  createUserWithEmailAndPassword,
+  onIdTokenChanged,
+  reauthenticateWithCredential,
+  reload,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signInAnonymously,
+  signInWithEmailAndPassword,
   signInWithPopup,
+  signOut,
+  type User,
+  updateEmail,
+  updatePassword,
+  updateProfile as updateFirebaseProfile,
 } from "firebase/auth";
-import { auth } from "@/lib/firebase";
+import { auth } from "../lib/firebase";
+import type { EmploymentStatus, UserRole, UserTier } from "../../server/types";
+
+export interface AuthProfile {
+  userId: string;
+  email: string;
+  role: UserRole;
+  tier: UserTier;
+  isApproved: boolean;
+  points: number;
+  totalSpent: number;
+  accountBalance: number;
+  completedOrderCount?: number;
+  referralCount?: number;
+  employmentStatus?: EmploymentStatus;
+  department?: string;
+  hrNotes?: string;
+  joinedAt?: string;
+  lastRoleUpdatedAt?: string;
+}
 
 interface AuthContextType {
   user: User | null;
-  profile: UserProfile | null;
   loading: boolean;
+  profile: AuthProfile | null;
+  profileError: string | null;
   isGuest: boolean;
-  hasPasswordProvider: boolean;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  getIdToken: () => Promise<string | null>;
+  login: (credentials: { email: string; password: string }) => Promise<void>;
+  register: (data: { email: string; password: string }) => Promise<void>;
+  continueAsGuest: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signInWithApple: () => Promise<void>;
-  continueAsGuest: () => void;
+  getIdToken: () => Promise<string>;
+  refreshProfile: () => Promise<AuthProfile | null>;
   verifyEmail: () => Promise<void>;
-  updateUserProfile: (data: { displayName?: string; photoURL?: string }) => Promise<void>;
-  updateUserEmail: (email: string, currentPassword: string) => Promise<void>;
-  updateUserPassword: (password: string, currentPassword: string) => Promise<void>;
-  reauthenticate: (password: string) => Promise<void>;
-  refreshProfile: () => Promise<void>;
+  updateUserProfile: (data: { displayName?: string | null }) => Promise<void>;
+  updateUserEmail: (email: string, password: string) => Promise<void>;
+  updateUserPassword: (newPassword: string, currentPassword: string) => Promise<void>;
+  hasPasswordProvider: boolean;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-const GUEST_KEY = "noir-guest";
-
-function safeGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
+function requireAuth() {
+  if (!auth) {
+    throw new Error("Firebase Auth is not configured. Check your VITE_FIREBASE_* environment variables.");
   }
-}
-
-function safeSet(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // ignore
-  }
-}
-
-function safeRemove(key: string): void {
-  try {
-    localStorage.removeItem(key);
-  } catch {
-    // ignore
-  }
+  return auth;
 }
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isGuest, setIsGuest] = useState<boolean>(() => {
-    return safeGet(GUEST_KEY) === "true";
-  });
+  const [profile, setProfile] = useState<AuthProfile | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [authResolved, setAuthResolved] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const requestRef = useRef(0);
 
-  const hasPasswordProvider = user?.providerData?.some((p) => p.providerId === "password") ?? false;
+  const loadProfile = useCallback(async (activeUser: User, forceRefresh = false) => {
+    const requestId = ++requestRef.current;
+    const token = await activeUser.getIdToken(forceRefresh);
+    const response = await fetch("/api/user/profile", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
 
-  const refreshProfile = useCallback(async () => {
-    if (!auth?.currentUser) {
-      setProfile(null);
-      return;
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.message || "Unable to load your account profile.");
     }
-    try {
-      const token = await auth.currentUser.getIdToken();
-      const res = await fetch("/api/user/profile", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setProfile(data.profile);
-        return;
-      }
 
-      const data = await res.json().catch(() => ({}));
-      if (res.status === 401) {
-        console.warn("[Auth] Server rejected the current session. Clearing local auth state.");
-        await signOut(auth);
-        setUser(null);
-        setProfile(null);
-        return;
-      }
-      console.error("Error fetching profile:", data.message || `Request failed with ${res.status}`);
-    } catch (err) {
-      console.error("Error fetching profile:", err);
+    if (requestId !== requestRef.current) {
+      return null;
     }
+
+    const nextProfile = (data.profile ?? null) as AuthProfile | null;
+    setProfile(nextProfile);
+    setProfileError(null);
+    return nextProfile;
   }, []);
 
   useEffect(() => {
     if (!auth) {
-      const id = setTimeout(() => setLoading(false), 0);
-      return () => clearTimeout(id);
+      setAuthResolved(true);
+      setProfileError("Firebase Auth is not configured. Check your VITE_FIREBASE_* environment variables.");
+      return;
     }
-    const unsubscribe = onAuthStateChanged(auth, async (u) => {
-      setUser(u);
-      if (u) {
-        setIsGuest(false);
-        safeRemove(GUEST_KEY);
-        await refreshProfile();
-      } else {
-        setProfile(null);
-      }
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [refreshProfile]);
 
-  const login = async (email: string, password: string) => {
-    if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
-    await signInWithEmailAndPassword(auth, email, password);
-    setIsGuest(false);
-    safeRemove(GUEST_KEY);
+    const unsubscribe = onIdTokenChanged(auth, async (nextUser) => {
+      setUser(nextUser);
+
+      if (!nextUser || nextUser.isAnonymous) {
+        requestRef.current += 1;
+        setProfile(null);
+        setProfileError(null);
+        setProfileLoading(false);
+        setAuthResolved(true);
+        return;
+      }
+
+      setProfileLoading(true);
+
+      try {
+        await loadProfile(nextUser);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unable to load your account profile.";
+        setProfile(null);
+        setProfileError(message);
+      } finally {
+        setProfileLoading(false);
+        setAuthResolved(true);
+      }
+    });
+
+    return () => unsubscribe();
+  }, [loadProfile]);
+
+  const login = async (credentials: { email: string; password: string }) => {
+    await signInWithEmailAndPassword(requireAuth(), credentials.email, credentials.password);
   };
 
-  const register = async (email: string, password: string) => {
-    if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
-    const cred = await createUserWithEmailAndPassword(auth, email, password);
-    if (cred.user) {
-      try {
-        await sendEmailVerification(cred.user);
-      } catch {
-        // Non-fatal: account is created even if verification email fails
-      }
-    }
-    setIsGuest(false);
-    safeRemove(GUEST_KEY);
+  const register = async (data: { email: string; password: string }) => {
+    await createUserWithEmailAndPassword(requireAuth(), data.email, data.password);
   };
 
   const logout = async () => {
-    try {
-      if (auth) {
-        await signOut(auth);
-      }
-    } catch (err) {
-      console.error("Sign out error:", err);
-    } finally {
-      // Always clear local state even if Firebase signOut fails or isn't available
-      setUser(null);
-      setProfile(null);
-      setIsGuest(false);
-      safeRemove(GUEST_KEY);
-    }
+    requestRef.current += 1;
+    setProfile(null);
+    setProfileError(null);
+    await signOut(requireAuth());
   };
 
-  const getIdToken = useCallback(async () => {
-    const currentUser = auth?.currentUser ?? user;
-    if (!currentUser) return null;
-    return currentUser.getIdToken(true);
-  }, [user]);
+  const continueAsGuest = async () => {
+    await signInAnonymously(requireAuth());
+  };
 
   const resetPassword = async (email: string) => {
-    if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
-    await sendPasswordResetEmail(auth, email);
+    await sendPasswordResetEmail(requireAuth(), email);
   };
 
   const signInWithGoogle = async () => {
-    if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
-    setIsGuest(false);
-    safeRemove(GUEST_KEY);
+    provider.setCustomParameters({ prompt: "select_account" });
+    await signInWithPopup(requireAuth(), provider);
   };
 
   const signInWithApple = async () => {
-    if (!auth) throw new Error("Authentication is not configured. Please check your environment settings.");
     const provider = new OAuthProvider("apple.com");
     provider.addScope("email");
     provider.addScope("name");
-    await signInWithPopup(auth, provider);
-    setIsGuest(false);
-    safeRemove(GUEST_KEY);
+    await signInWithPopup(requireAuth(), provider);
   };
 
-  const continueAsGuest = () => {
-    setIsGuest(true);
-    safeSet(GUEST_KEY, "true");
+  const getIdToken = async () => {
+    const currentAuth = requireAuth();
+    const activeUser = currentAuth.currentUser ?? user;
+    return activeUser ? activeUser.getIdToken() : "";
   };
+
+  const refreshProfile = useCallback(async () => {
+    const currentAuth = requireAuth();
+    const activeUser = currentAuth.currentUser ?? user;
+
+    if (!activeUser || activeUser.isAnonymous) {
+      requestRef.current += 1;
+      setProfile(null);
+      setProfileError(null);
+      return null;
+    }
+
+    setProfileLoading(true);
+    try {
+      return await loadProfile(activeUser, true);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unable to refresh your account profile.";
+      setProfile(null);
+      setProfileError(message);
+      throw err;
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [loadProfile, user]);
 
   const verifyEmail = async () => {
-    if (!auth || !auth.currentUser) throw new Error("No user is currently signed in.");
-    await sendEmailVerification(auth.currentUser);
-  };
-
-  const updateUserProfile = async (data: { displayName?: string; photoURL?: string }) => {
-    if (!auth || !auth.currentUser) throw new Error("No user is currently signed in.");
-    await updateProfile(auth.currentUser, data);
-    setUser({ ...auth.currentUser });
-  };
-
-  const reauthenticate = async (password: string) => {
-    if (!auth || !auth.currentUser) throw new Error("No user is currently signed in.");
-    const email = auth.currentUser.email;
-    if (!email) throw new Error("Account has no email address.");
-    const credential = EmailAuthProvider.credential(email, password);
-    await reauthenticateWithCredential(auth.currentUser, credential);
-  };
-
-  const updateUserEmail = async (email: string, currentPassword: string) => {
-    if (!auth || !auth.currentUser) throw new Error("No user is currently signed in.");
-    if (hasPasswordProvider) {
-      await reauthenticate(currentPassword);
+    const currentAuth = requireAuth();
+    const activeUser = currentAuth.currentUser ?? user;
+    if (!activeUser) {
+      throw new Error("You must be signed in to verify your email.");
     }
-    await updateEmail(auth.currentUser, email);
-    setUser({ ...auth.currentUser });
+    await sendEmailVerification(activeUser);
   };
 
-  const updateUserPassword = async (password: string, currentPassword: string) => {
-    if (!auth || !auth.currentUser) throw new Error("No user is currently signed in.");
-    if (!hasPasswordProvider) throw new Error("Password can only be changed for accounts created with email and password.");
-    await reauthenticate(currentPassword);
-    await updatePassword(auth.currentUser, password);
+  const updateUserProfile = async (data: { displayName?: string | null }) => {
+    const currentAuth = requireAuth();
+    const activeUser = currentAuth.currentUser ?? user;
+    if (!activeUser) {
+      throw new Error("You must be signed in to update your profile.");
+    }
+
+    await updateFirebaseProfile(activeUser, data);
+    await reload(activeUser);
+    setUser(currentAuth.currentUser);
   };
 
-  return (
-    <AuthContext.Provider
-      value={{ user, profile, loading, isGuest, hasPasswordProvider, login, register, logout, getIdToken, resetPassword, signInWithGoogle, signInWithApple, continueAsGuest, verifyEmail, updateUserProfile, updateUserEmail, updateUserPassword, reauthenticate, refreshProfile }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const updateUserEmail = async (email: string, password: string) => {
+    const currentAuth = requireAuth();
+    const activeUser = currentAuth.currentUser ?? user;
+    if (!activeUser || !activeUser.email) {
+      throw new Error("You must be signed in to update your email.");
+    }
+
+    const hasPasswordProvider = activeUser.providerData.some(
+      (provider) => provider.providerId === EmailAuthProvider.PROVIDER_ID
+    );
+
+    if (hasPasswordProvider) {
+      if (!password) {
+        throw new Error("Please enter your current password to change your email.");
+      }
+      const credential = EmailAuthProvider.credential(activeUser.email, password);
+      await reauthenticateWithCredential(activeUser, credential);
+    }
+
+    await updateEmail(activeUser, email);
+    await reload(activeUser);
+    await refreshProfile();
+    setUser(currentAuth.currentUser);
+  };
+
+  const updateUserPassword = async (newPassword: string, currentPassword: string) => {
+    const currentAuth = requireAuth();
+    const activeUser = currentAuth.currentUser ?? user;
+    if (!activeUser || !activeUser.email) {
+      throw new Error("You must be signed in to change your password.");
+    }
+
+    const credential = EmailAuthProvider.credential(activeUser.email, currentPassword);
+    await reauthenticateWithCredential(activeUser, credential);
+    await updatePassword(activeUser, newPassword);
+    await reload(activeUser);
+    setUser(currentAuth.currentUser);
+  };
+
+  const hasPasswordProvider = useMemo(
+    () =>
+      user?.providerData.some((provider) => provider.providerId === EmailAuthProvider.PROVIDER_ID) ??
+      false,
+    [user]
   );
+
+  const loading = !authResolved || profileLoading;
+
+  const contextValue: AuthContextType = {
+    user,
+    loading,
+    profile,
+    profileError,
+    isGuest: user?.isAnonymous || false,
+    logout,
+    login,
+    register,
+    continueAsGuest,
+    resetPassword,
+    signInWithGoogle,
+    signInWithApple,
+    getIdToken,
+    refreshProfile,
+    verifyEmail,
+    updateUserProfile,
+    updateUserEmail,
+    updateUserPassword,
+    hasPasswordProvider,
+  };
+
+  return <AuthContext.Provider value={contextValue}>{!loading && children}</AuthContext.Provider>;
 };
 
 // eslint-disable-next-line react-refresh/only-export-components
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be used within AuthProvider");
-  return ctx;
-};
+export const useAuth = () => useContext(AuthContext);

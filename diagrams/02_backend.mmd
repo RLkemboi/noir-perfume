@@ -1,0 +1,142 @@
+flowchart TD
+    U([API Client / Browser])
+    DB[("Firebase Firestore")]
+    MPESA["M-Pesa Daraja API\nSTK Push + Callback"]
+
+    subgraph BE["Backend — Hono on Node.js (port 3001)"]
+
+        %% ─── PRODUCTS ───────────────────────────────────────────
+        subgraph PROD["Products"]
+            direction TB
+            PR1["GET /api/products\nReturn published storefront products only"]
+            PR2["GET /api/products/:id\nReturn single product or 404"]
+            PR3["GET /api/products/admin\nadminAuthMiddleware — all products incl. drafts"]
+            PR4["POST /api/products\nadminAuthMiddleware — create new product"]
+            PR5["PUT /api/products/:id\nadminAuthMiddleware — update product fields"]
+            PR6["PATCH /api/products/:id/inventory\nadminAuthMiddleware — adjust stock count"]
+            PR7["POST /api/products/:id/duplicate\nadminAuthMiddleware — clone a product"]
+            PR8["DELETE /api/products/:id\nadminAuthMiddleware — archive (soft delete)"]
+        end
+
+        %% ─── CART ───────────────────────────────────────────────
+        subgraph CART["Cart — session-based, no auth"]
+            direction TB
+            CA1["GET /api/cart/:sessionId\nReturn items + totals"]
+            CA2["POST /api/cart/:sessionId\nAdd item or increment quantity"]
+            CA3["PUT /api/cart/:sessionId/:productId\nSet item quantity (0 removes)"]
+            CA4["DELETE /api/cart/:sessionId/:productId\nRemove single item"]
+            CA5["DELETE /api/cart/:sessionId\nClear entire cart"]
+        end
+
+        %% ─── CHECKOUT ───────────────────────────────────────────
+        subgraph CHKOUT["Checkout — POST /api/checkout"]
+            direction TB
+            CO1["Validate items and stock against Firestore"]
+            CO2["Verify Firebase token if Authorization header present"]
+            CO3["Evaluate payment policy — tier + method + balance"]
+            CO4{Payment method?}
+            CO5["Card — create order\nclear cart\naward loyalty"]
+            CO6["M-Pesa — create order\ninitiate STK push to phone\nclear cart"]
+            CO7["PayOnDelivery — create order\ndebit ledger if Gold+\nclear cart"]
+            CO8["400 — Invalid payload or out of stock"]
+            CO9["403 — COD not allowed for guest or tier"]
+            CO10["409 — Insufficient stock"]
+        end
+
+        %% ─── ORDERS ─────────────────────────────────────────────
+        subgraph ORDERS["Orders"]
+            direction TB
+            OR1["GET /api/orders/:orderId\nAuth by userId Bearer or sessionId query"]
+            OR2["GET /api/orders/me\nBearer token — all orders for logged-in user"]
+            OR3["GET /api/orders/session/:sessionId\nGuest order history by session UUID"]
+            OR4["POST /api/orders/:orderId/cancel\nCustomer cancel — only if not Shipped or later"]
+            OR5["POST /api/orders/:orderId/comment\nLeave star rating + review on Delivered order"]
+            OR6["POST /api/orders/:orderId/pay\nRepay COD outstanding balance"]
+            OR7["POST /api/orders/:orderId/mpesa-stk\nRetrigger M-Pesa STK push for unpaid order"]
+            OR8["POST /api/payments/mpesa/callback\nM-Pesa webhook — record payment receipt"]
+            OR9["POST /api/orders/:orderId/advance\nDev simulation — step order to next status"]
+            OR10["POST /api/orders/:orderId/customer-confirm\nCustomer confirms physical receipt"]
+        end
+
+        %% ─── USER ───────────────────────────────────────────────
+        subgraph USER["User"]
+            direction TB
+            US1["GET /api/user/profile\nBearer token — profile + tier progress"]
+            US2["POST /api/user/account/deposit\nBearer token — topup ledger balance (Gold+ only)"]
+        end
+
+        %% ─── DELIVERY AGENT ─────────────────────────────────────
+        subgraph DELIVERY["Delivery Agent"]
+            direction TB
+            DE1["GET /api/staff/available-orders\nDeliveryAgent token — Shipped orders queue"]
+            DE2["POST /api/staff/orders/:orderId/accept\nDeliveryAgent — assign self, status: Out for Delivery"]
+            DE3["POST /api/staff/orders/:orderId/deliver\nDeliveryAgent — mark delivered (must be assigned)"]
+            DE4["GET /api/staff/my-deliveries\nBearer token — agent's own active deliveries"]
+        end
+
+        %% ─── OPERATOR ───────────────────────────────────────────
+        subgraph OPQUEUE["Operator"]
+            direction TB
+            OP1["GET /api/operator/queue\ncheckOperator — Pending + Processing orders"]
+        end
+
+        %% ─── MARKETING ──────────────────────────────────────────
+        subgraph MKT["Marketing"]
+            direction TB
+            MK1["GET /api/marketing/analytics\ncheckMarketing — revenue summary + 8-week trend"]
+            MK2["GET /api/marketing/vip-users\ncheckMarketing — VIP user data (stub in dev)"]
+        end
+
+        %% ─── ADMIN ──────────────────────────────────────────────
+        subgraph ADMIN["Admin"]
+            direction TB
+            AD1["GET /api/admin/orders\ncheckAdmin — all orders"]
+            AD2["GET /api/admin/financials\ncheckAdmin — P&L summary + metrics"]
+            AD3["GET /api/admin/staff\ncheckAdmin — full staff directory"]
+            AD4["GET /api/admin/pending-staff\nAdmin Bearer — pending role applications"]
+            AD5["POST /api/admin/approve-staff/:userId\nAdmin Bearer — approve staff member"]
+            AD6["PATCH /api/admin/staff/:userId\ncheckAdmin — update role, status, HR notes"]
+            AD7["PUT /api/admin/users/:userId/tier\ncheckAdmin — manually set loyalty tier"]
+            AD8["PUT /api/admin/orders/:orderId/status\ncheckAdmin — set Pending/Processing/Shipped/Cancelled"]
+            AD9["POST /api/admin/orders/:orderId/finalize-delivery\ncheckAdmin — final delivery confirmation"]
+            AD10["GET /api/admin/system-logs\nAdmin Bearer — in-memory system event log"]
+        end
+
+        %% ─── STAFF REGISTRATION ─────────────────────────────────
+        subgraph STAFFREG["Staff Registration"]
+            direction TB
+            SR1["POST /api/staff/register\nBearer token — submit role application"]
+        end
+
+    end
+
+    U -->|GET /api/products| PROD
+    U -->|GET or POST /api/cart| CART
+    U -->|POST /api/checkout| CHKOUT
+    CO1 --> CO2
+    CO2 --> CO3
+    CO3 --> CO4
+    CO4 -->|Card| CO5
+    CO4 -->|Mpesa| CO6
+    CO4 -->|PayOnDelivery| CO7
+    CO4 -->|Invalid| CO8
+    CO4 -->|Guest COD| CO9
+    CO4 -->|No stock| CO10
+    CO6 -.-> MPESA
+    OR7 -.-> MPESA
+    OR8 -.-> MPESA
+    U -->|/api/orders| ORDERS
+    U -->|/api/user| USER
+    U -->|/api/staff| DELIVERY
+    U -->|/api/operator| OPQUEUE
+    U -->|/api/marketing| MKT
+    U -->|/api/admin| ADMIN
+    U -->|POST /api/staff/register| STAFFREG
+    PROD -.-> DB
+    CART -.-> DB
+    CHKOUT -.-> DB
+    ORDERS -.-> DB
+    USER -.-> DB
+    DELIVERY -.-> DB
+    ADMIN -.-> DB
+    STAFFREG -.-> DB

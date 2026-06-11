@@ -22,7 +22,7 @@ export default function StaffSignup() {
       if (password !== confirmPassword) {
         throw new Error("Passwords do not match");
       }
-      await register(email, password);
+      await register({ email, password });
       const token = await getIdToken();
       
       const res = await fetch("/api/staff/register", {

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Eye, EyeOff, Mail, Lock, UserPlus, LogIn } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
@@ -13,6 +13,8 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false);
   const { register, continueAsGuest, signInWithGoogle, signInWithApple } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const destination = typeof location.state?.from === "string" ? location.state.from : "/dashboard";
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,9 +32,9 @@ export default function Signup() {
     }
     setSubmitting(true);
     try {
-      await register(email, password);
+      await register({ email, password });
       toast.success("Account created. Welcome to NOIR.");
-      navigate("/");
+      navigate(destination, { replace: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Registration failed";
       toast.error(msg.replace("Firebase: ", "").replace(/\(.*\)/, "").trim());
@@ -50,7 +52,7 @@ export default function Signup() {
         await signInWithApple();
       }
       toast.success("Welcome to NOIR");
-      navigate("/");
+      navigate(destination, { replace: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Authentication failed";
       toast.error(msg.replace("Firebase: ", "").replace(/\(.*\)/, "").trim());
@@ -59,10 +61,18 @@ export default function Signup() {
     }
   };
 
-  const handleGuest = () => {
-    continueAsGuest();
-    toast.success("Browsing as guest");
-    navigate("/");
+  const handleGuest = async () => {
+    setSubmitting(true);
+    try {
+      await continueAsGuest();
+      toast.success("Browsing as guest");
+      navigate(destination, { replace: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Guest checkout is unavailable right now";
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

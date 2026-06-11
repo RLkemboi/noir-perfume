@@ -1,0 +1,68 @@
+flowchart TD
+    U([User arrives at the store])
+
+    %% ─── STOREFRONT ─────────────────────────────────────────
+    subgraph STORE["Browsing the Store"]
+        direction TB
+        ST1[Products load on screen]
+        ST2[Open a product — images and details shown]
+        ST3[Add item to cart]
+        ST4[Cart drawer slides open — items listed]
+        ST5[Review cart and go to checkout]
+    end
+
+    %% ─── CHECKOUT ───────────────────────────────────────────
+    subgraph CHKT["Placing an Order"]
+        direction TB
+        CK1[Enter name, address, and phone number]
+        CK2{How would you like to pay?}
+        CK3[Pay by card]
+        CK4[M-Pesa — payment prompt sent to phone]
+        CK5[Pay on delivery — account membership required]
+        CK6[Order confirmed — reference number shown]
+    end
+
+    %% ─── MY ACCOUNT ─────────────────────────────────────────
+    subgraph ACCT["My Account"]
+        direction TB
+        AC1{Already have an account?}
+        AC2[Sign up with email and password]
+        AC3[Log in]
+        AC4[Dashboard — order history and loyalty tier shown]
+        AC5{Want to work here?}
+        AC6[Submit a staff role application]
+        AC7[Waiting — admin must approve your account]
+    end
+
+    %% ─── STAFF PORTALS ──────────────────────────────────────
+    subgraph STAFF["Staff Portals"]
+        direction TB
+        SP1[Delivery Agent — pick up shipped orders and confirm delivery]
+        SP2[Operator — view and monitor the order processing queue]
+        SP3[Marketing — view revenue analytics and VIP customer data]
+        SP4[Admin — manage products, staff, orders, tiers, and finances]
+    end
+
+    U --> ST1
+    ST1 --> ST2
+    ST2 --> ST3
+    ST3 --> ST4
+    ST4 --> ST5
+    ST5 --> CK1
+    CK1 --> CK2
+    CK2 -->|Card| CK3
+    CK2 -->|M-Pesa| CK4
+    CK2 -->|On delivery| CK5
+    CK3 --> CK6
+    CK4 --> CK6
+    CK5 --> CK6
+    U --> AC1
+    AC1 -->|Yes| AC3
+    AC1 -->|No| AC2
+    AC2 --> AC3
+    AC3 --> AC4
+    AC3 --> STAFF
+    AC4 --> CK5
+    AC4 --> AC5
+    AC5 -->|Yes| AC6
+    AC6 --> AC7

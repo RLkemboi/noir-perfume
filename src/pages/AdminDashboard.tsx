@@ -54,11 +54,12 @@ interface FinancialSummary {
 const statusColors: Record<OrderStatus, string> = {
   "Pending": "text-yellow-500 border-yellow-500/20 bg-yellow-500/5",
   "Processing": "text-blue-500 border-blue-500/20 bg-blue-500/5",
-  "Shipped": "text-purple-500 border-purple-500/20 bg-purple-500/5",
+  "Shipped": "text-indigo-500 border-indigo-500/20 bg-indigo-500/5",
   "Out for Delivery": "text-orange-500 border-orange-500/20 bg-orange-500/5",
   "Delivered": "text-emerald-500 border-emerald-500/20 bg-emerald-500/5",
   "Cancelled": "text-red-500 border-red-500/20 bg-red-500/5",
 };
+
 
 const statusOptions: OrderStatus[] = ["Pending", "Processing", "Shipped", "Cancelled"];
 
@@ -341,6 +342,9 @@ export default function AdminDashboard() {
             <p className="text-muted-foreground text-sm mt-1">Noir Perfume Global Administration</p>
           </div>
           <div className="flex items-center gap-3">
+            <Link to="/admin/products" className="px-4 py-2 border border-primary/20 bg-primary/5 text-primary text-[10px] tracking-widest uppercase font-bold hover:bg-primary/10 transition-colors">
+              Catalogue Ops
+            </Link>
             <Link to="/dashboard" className="px-4 py-2 border border-border text-muted-foreground text-[10px] tracking-widest uppercase font-bold hover:text-foreground transition-colors flex items-center gap-2">
               <ArrowLeft className="w-3 h-3" /> Exit to Store
             </Link>
@@ -644,7 +648,7 @@ export default function AdminDashboard() {
                   <p className="mt-2 text-2xl font-serif font-bold text-yellow-500">{financials?.unpaidCodOrders ?? 0}</p>
                 </div>
                 <div className="glass-panel p-5">
-                  <p className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Bronze Deposit Orders</p>
+                  <p className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Partially Settled Orders</p>
                   <p className="mt-2 text-2xl font-serif font-bold text-primary">{financials?.partialCodOrders ?? 0}</p>
                 </div>
                 <div className="glass-panel p-5">

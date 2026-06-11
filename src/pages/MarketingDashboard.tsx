@@ -8,33 +8,41 @@ import {
 import { useAuth } from "@/context/AuthContext";
 import { toast } from "sonner";
 import { TierBadge } from "@/components/ui/TierBadge";
+import type { Order, UserTier } from "../../server/types";
+
+interface MarketingStats {
+  totalRevenue?: number;
+  orderCount?: number;
+  averageOrderValue?: number;
+  recentSales?: Order[];
+}
 
 export default function MarketingDashboard() {
   const { getIdToken, logout, profile } = useAuth();
   const navigate = useNavigate();
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<MarketingStats | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchStats = async () => {
-    try {
-      const token = await getIdToken();
-      const res = await fetch("/api/marketing/analytics", {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setStats(data);
-      }
-    } catch {
-      toast.error("Analytics sync failed");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchStats();
-  }, []);
+    const fetchStats = async () => {
+      try {
+        const token = await getIdToken();
+        const res = await fetch("/api/marketing/analytics", {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = (await res.json()) as MarketingStats;
+          setStats(data);
+        }
+      } catch {
+        toast.error("Analytics sync failed");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void fetchStats();
+  }, [getIdToken]);
 
   const handleLogout = async () => {
     try {
@@ -47,6 +55,15 @@ export default function MarketingDashboard() {
   };
 
   if (loading) return <div className="min-h-screen flex items-center justify-center">Tracing market trends...</div>;
+
+  const memberDistribution: Array<{ label: string; count: number; tier: UserTier }> = [
+    { label: "Black", count: 10, tier: "Black" },
+    { label: "Platinum", count: 35, tier: "Platinum" },
+    { label: "Gold", count: 88, tier: "Gold" },
+    { label: "Silver", count: 210, tier: "Silver" },
+    { label: "Bronze", count: 420, tier: "Bronze" },
+    { label: "Junior", count: 740, tier: "Junior" },
+  ];
 
   return (
     <div className="min-h-screen bg-background pt-24 pb-16 px-4">
@@ -128,7 +145,7 @@ export default function MarketingDashboard() {
           <div className="md:col-span-2 glass-panel p-8 space-y-6">
             <h3 className="text-sm font-bold tracking-widest uppercase text-primary">Recent Order Velocity</h3>
             <div className="space-y-4">
-              {stats?.recentSales?.map((sale: any) => (
+              {stats?.recentSales?.map((sale) => (
                 <div key={sale.orderId} className="flex justify-between items-center pb-4 border-b border-border/40 last:border-0 last:pb-0">
                   <div className="flex gap-4 items-center">
                     <div className="w-10 h-10 bg-secondary rounded flex items-center justify-center text-[10px] font-bold">
@@ -149,16 +166,10 @@ export default function MarketingDashboard() {
           <div className="glass-panel p-8 space-y-6">
             <h3 className="text-sm font-bold tracking-widest uppercase text-primary">Member Distribution</h3>
             <div className="space-y-5">
-              {[
-                { label: "Diamond Elite", count: 12, tier: "Diamond" },
-                { label: "Platinum", count: 45, tier: "Platinum" },
-                { label: "Gold", count: 128, tier: "Gold" },
-                { label: "Silver", count: 342, tier: "Silver" },
-                { label: "Bronze", count: 890, tier: "Bronze" },
-              ].map((item) => (
+              {memberDistribution.map((item) => (
                 <div key={item.label} className="space-y-2">
                   <div className="flex justify-between items-center text-[10px] font-bold uppercase tracking-widest">
-                    <TierBadge tier={item.tier as any} className="scale-75 origin-left" />
+                    <TierBadge tier={item.tier} className="scale-75 origin-left" />
                     <span>{item.count} members</span>
                   </div>
                   <div className="h-1.5 bg-border rounded-full overflow-hidden">
@@ -177,7 +188,7 @@ export default function MarketingDashboard() {
                 <Sparkles className="w-5 h-5 text-primary" />
                 <div>
                   <p className="text-[10px] font-bold uppercase tracking-widest text-primary">Staff Insight</p>
-                  <p className="text-xs text-muted-foreground">The Alchemist Circle comprises 0.2% of your user base.</p>
+                  <p className="text-xs text-muted-foreground">Black tier remains the smallest segment with the highest average spend concentration.</p>
                 </div>
               </div>
             </div>

@@ -7,8 +7,17 @@ import type { Context, Next } from "hono";
 import { cors } from "hono/cors";
 import { HTTPException } from "hono/http-exception";
 import { readFileSync } from "fs";
-import { products } from "./data/products.js";
-import type { CartItem, Order, OrderStatus, PaymentMethod, ShippingDetails, UserRole, UserTier } from "./types.js";
+import {
+  adjustInventoryHandler,
+  archiveProductHandler,
+  createProductHandler,
+  duplicateProductHandler,
+  getProducts as getAdminProductsHandler,
+  updateProductHandler,
+} from "./controllers/product.controller.js";
+import { adminAuthMiddleware } from "./middleware/auth.js";
+import { products as seededProducts } from "./data/products.js";
+import type { CartItem, Order, OrderStatus, PaymentMethod, ShippingDetails, UserRole, UserTier, RefundEntry } from "./types.js";
 import { getCart, setCart, deleteCart } from "./db/carts.js";
 import { 
   createOrder, 
@@ -28,12 +37,22 @@ import {
   getOrderByMpesaCheckoutRequestId,
   requestPaymentPrompt,
   recordOrderPayment,
-  updateOrderPaymentMeta
+  updateOrderPaymentMeta,
+  appendOrderAudit,
+  markInventoryReserved,
+  markInventoryRestored,
+  markLoyaltyAwarded,
+  markLoyaltyReversed,
+  patchOrder,
+  recordRefund,
 } from "./db/orders.js";
-import { adjustUserAccountBalance, getUserProfile, updateUserSpent, getPendingStaff, approveStaff, registerStaffApplication, getStaffMembers, updateStaffProfile } from "./db/users.js";
+import { adjustUserAccountBalance, getUserProfile, updateUserSpent, getPendingStaff, approveStaff, registerStaffApplication, getStaffMembers, setSpecialTier, updateStaffProfile } from "./db/users.js";
+import { addLedgerEntry } from "./db/ledger.js";
 import { auth } from "./db/firebase.js";
-import { getSystemLogs } from "./db/logs.js";
+import { addSystemLog, getSystemLogs } from "./db/logs.js";
 import { initiateMpesaStkPush, normalizeMpesaPhone } from "./mpesa.js";
+import { canUseLedger, evaluatePaymentPolicy, getTierPolicy, getTierProgress } from "./lib/membership.js";
+import { adjustInventory, getProductById as getManagedProductById, getStorefrontProducts } from "./db/products.js";
 
 const app = new Hono();
 
@@ -76,28 +95,54 @@ app.use(
 // Health check
 app.get("/api/health", (c) => c.json({ status: "ok", timestamp: new Date().toISOString() }));
 
-// SEO: robots.txt and sitemap.xml served explicitly so crawlers always find them
+// SEO: robots.txt and sitemap.xml served explicitly so crawlers always find them.
+// Falls back to public/ when dist/ has not been built (dev server mode).
+function readStaticFile(filename: string): string | null {
+  for (const root of ["./dist", "./public"]) {
+    try {
+      return readFileSync(`${root}/${filename}`, "utf-8");
+    } catch {
+      // try next root
+    }
+  }
+  return null;
+}
+
 app.get("/robots.txt", (c) => {
+  const content = readStaticFile("robots.txt");
+  if (content == null) throw new HTTPException(404, { message: "Not found" });
   c.header("Content-Type", "text/plain");
-  return c.body(readFileSync("./dist/robots.txt", "utf-8"));
+  return c.body(content);
 });
 
 app.get("/sitemap.xml", (c) => {
+  const content = readStaticFile("sitemap.xml");
+  if (content == null) throw new HTTPException(404, { message: "Not found" });
   c.header("Content-Type", "application/xml");
-  return c.body(readFileSync("./dist/sitemap.xml", "utf-8"));
+  return c.body(content);
 });
 
 // Products
-app.get("/api/products", (c) => c.json({ products, count: products.length }));
+app.get("/api/products", async (c) => {
+  const products = await getStorefrontProducts();
+  return c.json({ products, count: products.length });
+});
 
-app.get("/api/products/:id", (c) => {
+app.get("/api/products/admin", adminAuthMiddleware, getAdminProductsHandler);
+app.post("/api/products", adminAuthMiddleware, createProductHandler);
+app.put("/api/products/:id", adminAuthMiddleware, updateProductHandler);
+app.patch("/api/products/:id/inventory", adminAuthMiddleware, adjustInventoryHandler);
+app.post("/api/products/:id/duplicate", adminAuthMiddleware, duplicateProductHandler);
+app.delete("/api/products/:id", adminAuthMiddleware, archiveProductHandler);
+
+app.get("/api/products/:id", async (c) => {
   const id = c.req.param("id");
-  const product = products.find((p) => p.id === id);
+  const product = await getManagedProductById(id);
   if (!product) throw new HTTPException(404, { message: "Product not found" });
   return c.json({ product });
 });
 
-function parsePrice(price: any): number {
+function parsePrice(price: unknown): number {
   if (typeof price !== "string") return 0;
   return Number(price.replace(/[^0-9.]/g, "")) || 0;
 }
@@ -183,26 +228,8 @@ function isValidUUID(v: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
 }
 
-const PAY_ON_DELIVERY_LIMITS: Record<UserTier, number> = {
-  Junior: 0,
-  Bronze: 250,
-  Silver: 250,
-  Gold: 600,
-  Platinum: 1200,
-  Diamond: 2500,
-  "The Alchemist Circle": 5000,
-};
-
-function getPayOnDeliveryLimit(tier: UserTier): number {
-  return PAY_ON_DELIVERY_LIMITS[tier] ?? 0;
-}
-
 function isAccountBalanceTier(tier: UserTier): boolean {
-  return ["Silver", "Gold", "Platinum", "Diamond", "The Alchemist Circle"].includes(tier);
-}
-
-function isBronzeDepositTier(tier: UserTier): boolean {
-  return tier === "Bronze";
+  return getTierPolicy(tier).canUseLedger;
 }
 
 function estimateCogsRatio(collection?: string): number {
@@ -219,7 +246,7 @@ function getOrderFinancials(order: Order) {
   const recognizedExpense = Number(
     (order.items || [])
       .reduce((sum, item) => {
-        const product = products.find((p) => p.id === item.productId);
+        const product = seededProducts.find((p) => p.id === item.productId);
         const unitPrice = parsePrice(item.price);
         const qty = Number(item.quantity) || 0;
         return sum + unitPrice * estimateCogsRatio(product?.collection) * qty;
@@ -248,9 +275,122 @@ function getCancellationMessage(order: Order) {
   return order.cancellationMessage || "Your order was cancelled. Any pending charges were voided and further payment is disabled.";
 }
 
+async function awardLoyaltyIfEligible(order: Order) {
+  if (!order.userId) return order;
+  if (order.paymentStatus !== "Paid") return order;
+  if (order.loyaltyAwardedAt) return order;
+  await updateUserSpent(order.userId, order.total);
+  return (await markLoyaltyAwarded(order.orderId)) || order;
+}
+
+async function reverseLoyaltyIfNeeded(order: Order) {
+  if (!order.userId || !order.loyaltyAwardedAt || order.loyaltyReversedAt) return order;
+  await updateUserSpent(order.userId, -order.total);
+  return (await markLoyaltyReversed(order.orderId)) || order;
+}
+
+async function reverseOrderFinancials(order: Order, actorId = "admin", actorEmail?: string) {
+  if (order.refundStatus === "Reversed") {
+    return order;
+  }
+
+  const refundStatus: RefundEntry["status"] = "succeeded";
+  let refundChannel: RefundEntry["channel"] = "cod_void";
+  let refundAmount = 0;
+  let refundReason = "Order cancelled before fulfillment.";
+
+  if (order.paymentMethod === "PayOnDelivery" && order.userId && isAccountBalanceTier((await getUserProfile(order.userId)).tier)) {
+    refundAmount = Math.max(0, Number((order.total - order.amountPaid).toFixed(2)));
+    if (refundAmount > 0) {
+      const profile = await adjustUserAccountBalance(order.userId, refundAmount);
+      await addLedgerEntry({
+        id: crypto.randomUUID(),
+        userId: order.userId,
+        orderId: order.orderId,
+        type: "reversal",
+        direction: "credit",
+        amount: refundAmount,
+        balanceAfter: profile.accountBalance,
+        description: `Cancellation reversal for order ${order.orderId}`,
+        createdAt: new Date().toISOString(),
+        actorId,
+        actorEmail,
+      });
+    }
+    refundChannel = "ledger_reversal";
+    refundReason = "Ledger charge reversed on cancellation.";
+  } else if ((order.paymentMethod === "Card" || order.paymentMethod === "Mpesa") && order.amountPaid > 0) {
+    refundAmount = order.amountPaid;
+    refundChannel = "gateway_refund";
+    refundReason = `${order.paymentMethod} payment marked for refund reversal.`;
+  } else {
+    refundAmount = 0;
+    refundChannel = "cod_void";
+    refundReason = "Outstanding pay-after-delivery balance voided.";
+  }
+
+  const refundEntry: RefundEntry = {
+    refundId: crypto.randomUUID(),
+    amount: Number(refundAmount.toFixed(2)),
+    channel: refundChannel,
+    status: refundStatus,
+    reason: refundReason,
+    createdAt: new Date().toISOString(),
+    createdBy: actorId,
+  };
+
+  const patched = await patchOrder(order.orderId, {
+    amountDue: 0,
+    paymentStatus:
+      refundChannel === "cod_void"
+        ? order.amountPaid > 0
+          ? "PartiallyRefunded"
+          : "Unpaid"
+        : refundAmount >= order.amountPaid
+          ? "Refunded"
+          : "PartiallyRefunded",
+  });
+
+  if (patched) {
+    await recordRefund(
+      order.orderId,
+      refundEntry,
+      refundAmount > 0 ? "Reversed" : "None"
+    );
+    await reverseLoyaltyIfNeeded(patched);
+  }
+
+  return (await getOrderById(order.orderId)) || order;
+}
+
+async function restoreInventoryForOrder(order: Order, actorId = "system", actorEmail?: string) {
+  if (order.inventoryRestoredAt) {
+    return order;
+  }
+
+  for (const item of order.items) {
+    await adjustInventory(
+      item.productId,
+      item.quantity,
+      "order_cancelled",
+      actorId,
+      actorEmail,
+      order.orderId,
+      "Inventory restored after order cancellation."
+    );
+  }
+
+  await markInventoryRestored(order.orderId);
+  await appendOrderAudit(order.orderId, {
+    type: "inventory_restored",
+    message: "Inventory restored after cancellation.",
+  });
+  return (await getOrderById(order.orderId)) || order;
+}
+
 async function settleMockMpesaPayment(order: Order, phoneNumber: string, receiptNumber: string) {
   const amountToSettle = Number(order.amountDue.toFixed(2));
-  const updated = await recordOrderPayment(order.orderId, amountToSettle, "mpesa_stk");
+  let updated = await recordOrderPayment(order.orderId, amountToSettle, "mpesa_stk");
   if (updated) {
     await updateOrderPaymentMeta(order.orderId, {
       paymentPhone: phoneNumber,
@@ -260,10 +400,7 @@ async function settleMockMpesaPayment(order: Order, phoneNumber: string, receipt
       mpesaMerchantRequestId: updated.mpesaMerchantRequestId,
       mpesaCheckoutRequestId: updated.mpesaCheckoutRequestId,
     });
-  }
-
-  if (order.userId && amountToSettle > 0) {
-    await updateUserSpent(order.userId, amountToSettle);
+    updated = await awardLoyaltyIfEligible(updated);
   }
 
   return updated;
@@ -285,7 +422,7 @@ function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
     .reduce((sum, order) => sum + order.total, 0);
   const totalEstimatedCogs = activeOrders.reduce((sum, order) => sum + getOrderFinancials(order).recognizedExpense, 0);
   const estimatedGrossProfit = bookedRevenue - totalEstimatedCogs;
-  const operatingNetWorth = Number((realizedRevenue - totalEstimatedCogs - cancelledRevenue).toFixed(2));
+  const operatingNetWorth = Number((realizedRevenue - totalEstimatedCogs).toFixed(2));
   const averageOrderValue = activeOrders.length ? bookedRevenue / activeOrders.length : 0;
   const deliveryCompletionRate = activeOrders.length ? deliveredOrders.length / activeOrders.length : 0;
   const payOnDeliveryOrders = activeOrders.filter((order) => order.paymentMethod === "PayOnDelivery");
@@ -365,7 +502,7 @@ function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
 
   let cumulativeNetWorth = 0;
   let previousEstimatedProfit: number | null = null;
-  const weeklyTrend = weeklyWindow.map(({ key, label }, index) => {
+  const weeklyTrend = weeklyWindow.map(({ key, label }) => {
     const week = weeklyMap.get(key);
     const currentProfit = week ? Number((week.realizedRevenue - week.recognizedExpense).toFixed(2)) : 0;
     cumulativeNetWorth += currentProfit;
@@ -517,13 +654,20 @@ app.delete("/api/cart/:sessionId", async (c) => {
 
 // Checkout
 app.post("/api/checkout", async (c) => {
-  let body: { sessionId: string; items: CartItem[]; shipping?: ShippingDetails; paymentMethod?: PaymentMethod; paymentPhone?: string };
+  let body: {
+    sessionId: string;
+    items: CartItem[];
+    shipping?: ShippingDetails;
+    paymentMethod?: PaymentMethod;
+    paymentPhone?: string;
+    upfrontAmount?: number;
+  };
   try {
     body = await c.req.json();
   } catch {
     throw new HTTPException(400, { message: "Invalid JSON body" });
   }
-  const { sessionId, items, shipping, paymentMethod = "Card", paymentPhone } = body;
+  const { sessionId, items, shipping, paymentMethod = "Card", paymentPhone, upfrontAmount } = body;
 
   if (!sessionId || !isValidUUID(sessionId) || !Array.isArray(items) || items.length === 0) {
     throw new HTTPException(400, { message: "Invalid checkout payload" });
@@ -536,19 +680,26 @@ app.post("/api/checkout", async (c) => {
   const validatedItems: CartItem[] = [];
 
   for (const item of items) {
-    const product = products.find((p) => p.id === item.productId);
+    const product = await getManagedProductById(item.productId);
     if (!product) {
       throw new HTTPException(400, { message: `Unknown product: ${item.productId}` });
     }
     const qty = Math.max(1, Math.floor(item.quantity || 1));
-    const price = parsePrice(product.price);
+    if (product.status !== "published" || product.visibility !== "public") {
+      throw new HTTPException(400, { message: `${product.name} is not currently available for checkout.` });
+    }
+    if (product.stockQuantity < qty) {
+      throw new HTTPException(409, { message: `${product.name} only has ${product.stockQuantity} unit(s) left in stock.` });
+    }
+    const price = Number(product.price);
+    const primaryImage = product.images.find((image) => image.isPrimary) || product.images[0];
     total += price * qty;
     validatedItems.push({
       productId: product.id,
       name: product.name,
       brand: product.brand,
-      price: product.price,
-      image: product.image,
+      price: `$${price.toFixed(2)}`,
+      image: primaryImage?.url || "",
       quantity: qty,
     });
   }
@@ -582,33 +733,45 @@ app.post("/api/checkout", async (c) => {
   let paymentPromptCount: number | undefined;
   let paymentPromptRequestedAt: string | undefined;
   let accountBalanceDelta = 0;
-  let settledAtCheckoutAmount = 0;
+  const effectiveTier: UserTier = customerProfile?.tier ?? "Junior";
+  const policyEvaluation = evaluatePaymentPolicy({
+    isGuest: !userId,
+    tier: effectiveTier,
+    paymentMethod,
+    orderTotal: Number(total.toFixed(2)),
+    accountBalance: customerProfile?.accountBalance ?? 0,
+    upfrontAmount,
+  });
+
+  if (!policyEvaluation.allowed) {
+    throw new HTTPException(403, { message: policyEvaluation.reason || "Payment method is not allowed for this membership tier." });
+  }
+
+  if (paymentMethod === "PayOnDelivery" && (!userId || !customerProfile)) {
+    throw new HTTPException(403, { message: "Cash-on-delivery requires a signed-in membership account." });
+  }
 
   if (paymentMethod === "PayOnDelivery") {
-    if (!userId || !customerProfile) {
-      throw new HTTPException(403, { message: "Pay on delivery is only available to signed-in members." });
-    }
-    payOnDeliveryLimit = getPayOnDeliveryLimit(customerProfile.tier);
-    if (customerProfile.tier === "Junior" || payOnDeliveryLimit <= 0) {
-      throw new HTTPException(403, { message: "Junior members do not yet have pay-on-delivery access." });
-    }
-    if (Number(total.toFixed(2)) > payOnDeliveryLimit) {
-      throw new HTTPException(403, { message: `Your ${customerProfile.tier} tier pay-on-delivery limit is $${payOnDeliveryLimit.toFixed(2)}.` });
-    }
+    const policy = policyEvaluation.policy;
+    payOnDeliveryLimit = policy.maxOutstandingBalance == null ? undefined : policy.maxOutstandingBalance;
+    initialAmountPaid = Number(policyEvaluation.upfrontAmount.toFixed(2));
+    paymentPromptCount = 0;
+    paymentPromptRequestedAt = undefined;
 
-    if (isBronzeDepositTier(customerProfile.tier)) {
-      initialAmountPaid = Number((total * 0.5).toFixed(2));
-      settledAtCheckoutAmount = initialAmountPaid;
-      paymentReference = "BRONZE-50PCT-DEPOSIT";
-      paymentPromptCount = 0;
-    } else if (isAccountBalanceTier(customerProfile.tier)) {
-      initialAmountPaid = Number(total.toFixed(2));
-      settledAtCheckoutAmount = initialAmountPaid;
-      accountBalanceDelta = -initialAmountPaid;
-      paymentReference = (customerProfile.accountBalance ?? 0) >= total ? "ACCOUNT_BALANCE" : "ACCOUNT_CREDIT";
-      paymentPromptCount = 0;
-      paymentPromptRequestedAt = undefined;
+    if (policy.canUseLedger) {
+      accountBalanceDelta = -Number(policyEvaluation.ledgerCharge.toFixed(2));
+      if (policyEvaluation.ledgerCharge <= 0) {
+        paymentReference = "LEDGER_PREPAID";
+      } else if (initialAmountPaid > 0) {
+        paymentReference = "LEDGER_PARTIAL";
+      } else {
+        paymentReference = "ACCOUNT_CREDIT";
+      }
+    } else {
+      paymentReference = "PAY_AFTER_DELIVERY";
     }
+  } else if (paymentMethod === "Mpesa") {
+    initialAmountPaid = 0;
   }
 
   let normalizedPaymentPhone: string | undefined;
@@ -641,6 +804,46 @@ app.post("/api/checkout", async (c) => {
       paymentPromptRequestedAt,
     }
   );
+
+  // Reserve stock item by item; if a race depleted stock since validation,
+  // roll back partial reservations and void the order instead of leaving it half-reserved.
+  const reservedItems: CartItem[] = [];
+  try {
+    for (const item of validatedItems) {
+      await adjustInventory(
+        item.productId,
+        -item.quantity,
+        "order_placed",
+        userId || "guest",
+        userEmail,
+        order.orderId,
+        "Inventory reserved at checkout."
+      );
+      reservedItems.push(item);
+    }
+  } catch (err) {
+    for (const reserved of reservedItems) {
+      await adjustInventory(
+        reserved.productId,
+        reserved.quantity,
+        "order_cancelled",
+        "system",
+        undefined,
+        order.orderId,
+        "Reservation rolled back after stock conflict at checkout."
+      ).catch(() => undefined);
+    }
+    await cancelOrder(order.orderId, "Order voided: stock became unavailable during checkout.");
+    addSystemLog("warning", "Checkout", `Order ${order.orderId} voided due to stock conflict during reservation.`);
+    throw new HTTPException(409, {
+      message: err instanceof Error ? err.message : "One of the items just sold out. Please review your cart and try again.",
+    });
+  }
+  await markInventoryReserved(order.orderId);
+  await appendOrderAudit(order.orderId, {
+    type: "inventory_reserved",
+    message: "Inventory reserved at checkout.",
+  });
 
   if (paymentMethod === "Mpesa" && normalizedPaymentPhone) {
     try {
@@ -686,20 +889,28 @@ app.post("/api/checkout", async (c) => {
     }
   }
 
+  if (paymentMethod === "PayOnDelivery" && userId && accountBalanceDelta !== 0) {
+    const updatedProfile = await adjustUserAccountBalance(userId, accountBalanceDelta);
+    await addLedgerEntry({
+      id: crypto.randomUUID(),
+      userId,
+      orderId: order.orderId,
+      type: "charge",
+      direction: "debit",
+      amount: Math.abs(accountBalanceDelta),
+      balanceAfter: updatedProfile.accountBalance,
+      description: `Ledger-backed checkout for order ${order.orderId}`,
+      createdAt: new Date().toISOString(),
+      actorId: userId,
+      actorEmail: userEmail,
+      metadata: { paymentReference: paymentReference || "ACCOUNT_CREDIT" },
+    });
+  }
+
   await deleteCart(sessionId);
 
-  if (paymentMethod === "PayOnDelivery" && userId && accountBalanceDelta !== 0) {
-    await adjustUserAccountBalance(userId, accountBalanceDelta);
-  }
-
-  if (userId && paymentMethod !== "Mpesa") {
-    const spendAmount = paymentMethod === "PayOnDelivery" ? settledAtCheckoutAmount : order.total;
-    if (spendAmount > 0) {
-      await updateUserSpent(userId, spendAmount);
-    }
-  }
-
-  return c.json({ success: true, orderId: order.orderId, total: order.total });
+  const finalizedOrder = await awardLoyaltyIfEligible((await getOrderById(order.orderId)) || order);
+  return c.json({ success: true, orderId: order.orderId, total: order.total, order: finalizedOrder });
   });
 
 app.get("/api/user/profile", async (c) => {
@@ -709,7 +920,8 @@ app.get("/api/user/profile", async (c) => {
   try {
     const decoded = await verifyAuthToken(token);
     const profile = await getUserProfile(decoded.uid, decoded.email);
-    return c.json({ profile });
+    const tierProgress = getTierProgress(profile.totalSpent ?? 0, profile.completedOrderCount ?? 0);
+    return c.json({ profile, tierProgress });
   } catch (err) {
     if (err instanceof HTTPException) throw err;
     console.error("[API] Failed to load user profile:", err);
@@ -719,6 +931,7 @@ app.get("/api/user/profile", async (c) => {
 
   app.post("/api/user/account/deposit", async (c) => {
     const decoded = await getAuthenticatedUser(c);
+    const profile = await getUserProfile(decoded.uid, decoded.email);
 
     let body: { amount: number };
     try {
@@ -731,28 +944,51 @@ app.get("/api/user/profile", async (c) => {
       throw new HTTPException(400, { message: "Deposit amount must be greater than zero." });
     }
 
-    // TODO: Replace this simplified balance mutation with a proper account ledger.
-    const profile = await adjustUserAccountBalance(decoded.uid, Number(body.amount.toFixed(2)));
-    return c.json({ success: true, profile });
+    if (!canUseLedger(profile)) {
+      throw new HTTPException(403, { message: `${profile.tier} members cannot use the running balance account.` });
+    }
+    if (getTierPolicy(profile.tier).rank < getTierPolicy("Gold").rank) {
+      throw new HTTPException(403, { message: "Deposits unlock at Gold tier. Silver can settle balances during checkout repayment." });
+    }
+
+    const updatedProfile = await adjustUserAccountBalance(decoded.uid, Number(body.amount.toFixed(2)));
+    await addLedgerEntry({
+      id: crypto.randomUUID(),
+      userId: decoded.uid,
+      type: "deposit",
+      direction: "credit",
+      amount: Number(body.amount.toFixed(2)),
+      balanceAfter: updatedProfile.accountBalance,
+      description: "Customer deposit to running balance",
+      createdAt: new Date().toISOString(),
+      actorId: decoded.uid,
+      actorEmail: decoded.email,
+    });
+    return c.json({ success: true, profile: updatedProfile });
   });
 
-  // Simulation: Advance order status
-  app.post("/api/orders/:orderId/advance", async (c) => {
+  // Fulfillment: advance order through the operator pipeline.
+  // Operators move orders Pending -> Processing -> Shipped only;
+  // "Out for Delivery" and "Delivered" are owned by delivery agents.
+  app.post("/api/orders/:orderId/advance", checkOperator, async (c) => {
   const orderId = Number(c.req.param("orderId"));
+  if (!Number.isFinite(orderId)) {
+    throw new HTTPException(400, { message: "Invalid order ID" });
+  }
   const order = await getOrderById(orderId);
   if (!order) throw new HTTPException(404, { message: "Order not found" });
 
-  const statuses: OrderStatus[] = ["Pending", "Processing", "Shipped", "Out for Delivery", "Delivered"];
-  const currentIndex = statuses.indexOf(order.status);
+  const operatorStatuses: OrderStatus[] = ["Pending", "Processing", "Shipped"];
+  const currentIndex = operatorStatuses.indexOf(order.status);
 
-  if (currentIndex === -1 || currentIndex === statuses.length - 1) {
-    return c.json({ order, message: "Order already delivered or in unknown state" });
+  if (currentIndex === -1) {
+    throw new HTTPException(400, { message: `Order is "${order.status}" and can no longer be advanced from the fulfillment queue.` });
+  }
+  if (currentIndex === operatorStatuses.length - 1) {
+    return c.json({ order, message: "Order already shipped. Delivery agents handle the remaining stages." });
   }
 
-  const nextStatus = statuses[currentIndex + 1];
-  if (!nextStatus) {
-    return c.json({ order, message: "No next status available" });
-  }
+  const nextStatus = operatorStatuses[currentIndex + 1];
   const updatedOrder = await updateOrderStatus(orderId, nextStatus);
 
   return c.json({ order: updatedOrder });
@@ -824,6 +1060,35 @@ app.get("/api/user/profile", async (c) => {
     return c.json({ success: true, order: updated, message: "Payment prompt requested." });
   });
 
+const handleCustomerOrderCancellation = async (c: Context) => {
+  const orderId = Number(c.req.param("orderId"));
+  if (!Number.isFinite(orderId)) {
+    throw new HTTPException(400, { message: "Invalid order ID" });
+  }
+
+  const order = await getOrderById(orderId);
+  if (!order) throw new HTTPException(404, { message: "Order not found" });
+  await ensureOrderAccess(c, order);
+
+  if (order.status === "Shipped" || order.status === "Out for Delivery" || order.status === "Delivered") {
+    throw new HTTPException(400, { message: "This order can no longer be cancelled by the customer." });
+  }
+  if (order.status === "Cancelled") {
+    return c.json({ success: true, order });
+  }
+
+  const cancellationMessage = "Order cancelled by customer before dispatch.";
+  await cancelOrder(orderId, cancellationMessage);
+  await reverseOrderFinancials(order, order.userId || "guest", order.userEmail);
+  await restoreInventoryForOrder(order, order.userId || "guest", order.userEmail);
+  const updated = (await getOrderById(orderId)) || order;
+  addSystemLog("info", "OrderCancellation", `Customer cancelled order ${orderId}.`);
+  return c.json({ success: true, order: updated });
+};
+
+app.post("/api/orders/:orderId/cancel", handleCustomerOrderCancellation);
+app.post("/api/orders/:orderId/customer-cancel", handleCustomerOrderCancellation);
+
   app.post("/api/orders/:orderId/pay", async (c) => {
     const orderId = Number(c.req.param("orderId"));
     const order = await getOrderById(orderId);
@@ -842,23 +1107,41 @@ app.get("/api/user/profile", async (c) => {
       throw new HTTPException(400, { message: "Invalid payment body" });
     }
 
-    const access = await ensureOrderAccess(c, order);
+    const actor = await ensureOrderAccess(c, order);
     if (!Number.isFinite(body.amount) || body.amount <= 0) {
       throw new HTTPException(400, { message: "Payment amount must be greater than zero." });
     }
     if (body.amount > order.amountDue) {
       throw new HTTPException(400, { message: "Payment amount exceeds the remaining balance." });
     }
-    if (Number(body.amount.toFixed(2)) !== Number(order.amountDue.toFixed(2))) {
-      throw new HTTPException(400, { message: "Delivery orders now require settling the full remaining balance at once." });
+    const customerTierProfile = order.userId ? await getUserProfile(order.userId) : undefined;
+    const allowPartialRepayment = !!customerTierProfile && canUseLedger(customerTierProfile);
+    if (!allowPartialRepayment && Number(body.amount.toFixed(2)) !== Number(order.amountDue.toFixed(2))) {
+      throw new HTTPException(400, { message: "This order requires settling the full remaining balance in one payment." });
     }
 
-    const settledAmount = Number(order.amountDue.toFixed(2));
-    const updated = await recordOrderPayment(orderId, settledAmount);
-    if (updated?.userId) {
-      await updateUserSpent(updated.userId, settledAmount);
-    } else if (access && "uid" in access) {
-      await updateUserSpent(access.uid, settledAmount);
+    const settledAmount = Number((allowPartialRepayment ? body.amount : order.amountDue).toFixed(2));
+    let updated = await recordOrderPayment(orderId, settledAmount);
+    if (updated) {
+      if (order.userId) {
+        if (customerTierProfile && canUseLedger(customerTierProfile)) {
+          const balance = await adjustUserAccountBalance(order.userId, settledAmount);
+          await addLedgerEntry({
+            id: crypto.randomUUID(),
+            userId: order.userId,
+            orderId: order.orderId,
+            type: "deposit",
+            direction: "credit",
+            amount: settledAmount,
+            balanceAfter: balance.accountBalance,
+            description: `Ledger repayment for order ${order.orderId}`,
+            createdAt: new Date().toISOString(),
+            actorId: actor?.uid || order.userId,
+            actorEmail: actor?.email || order.userEmail,
+          });
+        }
+      }
+      updated = await awardLoyaltyIfEligible(updated);
     }
     return c.json({ success: true, order: updated });
   });
@@ -939,7 +1222,17 @@ app.get("/api/user/profile", async (c) => {
     }
   });
 
-  app.post("/api/payments/mpesa/callback", async (c) => {
+  // When MPESA_CALLBACK_SECRET is set, Daraja must be configured to call
+  // /api/payments/mpesa/callback/<secret>; the bare route is then rejected.
+  const mpesaCallbackHandler = async (c: Context) => {
+    const configuredSecret = process.env.MPESA_CALLBACK_SECRET || "";
+    if (configuredSecret) {
+      const providedSecret = c.req.param("secret") || "";
+      if (providedSecret !== configuredSecret) {
+        addSystemLog("warning", "MpesaCallback", "Rejected callback with missing or invalid secret.");
+        throw new HTTPException(403, { message: "Forbidden" });
+      }
+    }
     const body = await c.req.json().catch(() => ({} as Record<string, unknown>));
     const callback = ((body as {
       Body?: {
@@ -969,7 +1262,12 @@ app.get("/api/user/profile", async (c) => {
     const findValue = (name: string) => metadata.find((entry) => entry.Name === name)?.Value;
 
     if (callback.ResultCode === 0) {
-      const amount = Number(findValue("Amount") || order.amountDue || order.total);
+      const reportedAmount = Number(findValue("Amount") || order.amountDue || order.total);
+      // Never credit more than the remaining balance, regardless of payload.
+      const amount = Math.min(
+        Number.isFinite(reportedAmount) && reportedAmount > 0 ? reportedAmount : order.amountDue,
+        order.amountDue
+      );
       const receiptNumber = String(findValue("MpesaReceiptNumber") || "");
       const phoneNumber = String(findValue("PhoneNumber") || order.paymentPhone || "");
 
@@ -977,8 +1275,7 @@ app.get("/api/user/profile", async (c) => {
         return c.json({ success: true, duplicate: true });
       }
 
-      const wasUnpaid = order.amountDue > 0;
-      const updated = await recordOrderPayment(order.orderId, Number(amount.toFixed(2)), "mpesa_stk");
+      let updated = await recordOrderPayment(order.orderId, Number(amount.toFixed(2)), "mpesa_stk");
       if (updated) {
         await updateOrderPaymentMeta(order.orderId, {
           paymentPhone: phoneNumber || order.paymentPhone,
@@ -988,10 +1285,7 @@ app.get("/api/user/profile", async (c) => {
           mpesaMerchantRequestId: callback.MerchantRequestID || updated.mpesaMerchantRequestId,
           mpesaCheckoutRequestId: callback.CheckoutRequestID || updated.mpesaCheckoutRequestId,
         });
-      }
-
-      if (wasUnpaid && order.userId) {
-        await updateUserSpent(order.userId, Number(amount.toFixed(2)));
+        updated = await awardLoyaltyIfEligible(updated);
       }
 
       return c.json({ success: true });
@@ -1004,7 +1298,10 @@ app.get("/api/user/profile", async (c) => {
     });
 
     return c.json({ success: true });
-  });
+  };
+
+  app.post("/api/payments/mpesa/callback", mpesaCallbackHandler);
+  app.post("/api/payments/mpesa/callback/:secret", mpesaCallbackHandler);
 
   // Staff: Get orders ready for pickup/delivery (Shipped)
   app.get("/api/staff/available-orders", async (c) => {
@@ -1014,7 +1311,7 @@ app.get("/api/user/profile", async (c) => {
 
   try {
     const decoded = await auth.verifyIdToken(token);
-    const profile = await getUserProfile(decoded.uid);
+    const profile = await getUserProfile(decoded.uid, decoded.email);
     if (profile.role !== "DeliveryAgent" && profile.role !== "Manager") {
       throw new HTTPException(403, { message: "Forbidden" });
     }
@@ -1035,7 +1332,7 @@ app.get("/api/user/profile", async (c) => {
 
   try {
     const decoded = await auth.verifyIdToken(token);
-    const profile = await getUserProfile(decoded.uid);
+    const profile = await getUserProfile(decoded.uid, decoded.email);
     if (profile.role !== "DeliveryAgent") {
       throw new HTTPException(403, { message: "Only delivery agents can accept orders" });
     }
@@ -1064,7 +1361,7 @@ app.get("/api/user/profile", async (c) => {
 
     try {
       const decoded = await auth.verifyIdToken(token);
-      const profile = await getUserProfile(decoded.uid);
+      const profile = await getUserProfile(decoded.uid, decoded.email);
       if (profile.role !== "DeliveryAgent") {
         throw new HTTPException(403, { message: "Unauthorized role" });
       }
@@ -1165,7 +1462,7 @@ app.get("/api/user/profile", async (c) => {
 
   try {
     const decoded = await auth.verifyIdToken(token);
-    const profile = await getUserProfile(decoded.uid);
+    const profile = await getUserProfile(decoded.uid, decoded.email);
     if (profile.role !== "Admin") throw new HTTPException(403, { message: "Admin only" });
 
     const pending = await getPendingStaff();
@@ -1185,7 +1482,7 @@ app.get("/api/user/profile", async (c) => {
 
   try {
     const decoded = await auth.verifyIdToken(token);
-    const profile = await getUserProfile(decoded.uid);
+    const profile = await getUserProfile(decoded.uid, decoded.email);
     if (profile.role !== "Admin") throw new HTTPException(403, { message: "Admin only" });
 
     const updated = await approveStaff(targetUserId);
@@ -1221,7 +1518,7 @@ app.get("/api/user/profile", async (c) => {
     if (!token || !auth) throw new HTTPException(401, { message: "Unauthorized" });
     try {
       const decoded = await auth.verifyIdToken(token);
-      const profile = await getUserProfile(decoded.uid);
+      const profile = await getUserProfile(decoded.uid, decoded.email);
       if (profile.role !== "Operator" && profile.role !== "Manager" && profile.role !== "Admin") {
         throw new HTTPException(403, { message: "Operator access required" });
       }
@@ -1238,7 +1535,7 @@ app.get("/api/user/profile", async (c) => {
     if (!token || !auth) throw new HTTPException(401, { message: "Unauthorized" });
     try {
       const decoded = await auth.verifyIdToken(token);
-      const profile = await getUserProfile(decoded.uid);
+      const profile = await getUserProfile(decoded.uid, decoded.email);
       if (profile.role !== "Marketing" && profile.role !== "Manager" && profile.role !== "Admin") {
         throw new HTTPException(403, { message: "Marketing access required" });
       }
@@ -1283,7 +1580,7 @@ app.get("/api/user/profile", async (c) => {
 
   try {
     const decoded = await auth.verifyIdToken(token);
-    const profile = await getUserProfile(decoded.uid);
+    const profile = await getUserProfile(decoded.uid, decoded.email);
     
     if (profile.role !== "Admin") {
       throw new HTTPException(403, { message: "Forbidden: Admin access required" });
@@ -1359,6 +1656,27 @@ app.get("/api/user/profile", async (c) => {
     return c.json({ success: true, profile: updated });
   });
 
+  app.put("/api/admin/users/:userId/tier", checkAdmin, async (c) => {
+    const targetUserId = c.req.param("userId");
+    if (!targetUserId) {
+      throw new HTTPException(400, { message: "Missing user ID" });
+    }
+    let body: { tier?: UserTier };
+    try {
+      body = await c.req.json();
+    } catch {
+      throw new HTTPException(400, { message: "Invalid JSON body" });
+    }
+
+    const allowedTiers: UserTier[] = ["Junior", "Bronze", "Silver", "Gold", "Platinum", "Black"];
+    if (!body.tier || !allowedTiers.includes(body.tier)) {
+      throw new HTTPException(400, { message: `Tier must be one of: ${allowedTiers.join(", ")}.` });
+    }
+
+    const updated = await setSpecialTier(targetUserId, body.tier);
+    return c.json({ success: true, profile: updated });
+  });
+
   app.put("/api/admin/orders/:orderId/status", checkAdmin, async (c) => {
   const orderId = Number(c.req.param("orderId"));
   if (!Number.isFinite(orderId)) {
@@ -1384,15 +1702,11 @@ app.get("/api/user/profile", async (c) => {
     let order: Order | null;
     if (body.status === "Cancelled") {
       const cancellationMessage = body.cancellationMessage?.trim() || "Your order was cancelled. Any pending charges were voided and further payment is disabled.";
-
-      if (existingOrder.status !== "Cancelled" && existingOrder.amountPaid > 0 && existingOrder.userId) {
-        if (existingOrder.paymentMethod === "PayOnDelivery" && ["ACCOUNT_BALANCE", "ACCOUNT_CREDIT"].includes(existingOrder.paymentReference || "")) {
-          await adjustUserAccountBalance(existingOrder.userId, existingOrder.amountPaid);
-        }
-        await updateUserSpent(existingOrder.userId, -existingOrder.amountPaid);
-      }
-
-      order = await cancelOrder(orderId, cancellationMessage);
+      await cancelOrder(orderId, cancellationMessage);
+      await reverseOrderFinancials(existingOrder, "admin");
+      await restoreInventoryForOrder(existingOrder, "admin");
+      addSystemLog("warning", "OrderCancellation", `Admin cancelled order ${orderId}.`);
+      order = await getOrderById(orderId);
     } else {
       order = await updateOrderStatus(orderId, body.status);
     }
@@ -1479,8 +1793,10 @@ app.get("/api/orders/:orderId", async (c) => {
     if (decoded.uid !== order.userId) {
       throw new HTTPException(403, { message: "Forbidden" });
     }
-  } else if (order.sessionId) {
-    if (!isValidUUID(sessionId) || sessionId !== order.sessionId) {
+  } else {
+    // Guest orders must always be claimed with the matching session ID;
+    // deny by default if the order somehow has no session either.
+    if (!order.sessionId || !isValidUUID(sessionId) || sessionId !== order.sessionId) {
       throw new HTTPException(403, { message: "Forbidden" });
     }
   }
@@ -1496,7 +1812,12 @@ app.notFound((c) => {
   if (c.req.path.startsWith("/api/")) {
     return c.json({ error: "Not found" }, 404);
   }
-  return c.html(readFileSync("./dist/index.html", "utf-8"));
+  const indexHtml = readStaticFile("index.html");
+  if (indexHtml == null) {
+    // Frontend not built — dev mode serves the SPA from Vite on another port.
+    return c.text("Frontend build not found. Run `npm run build` or use the Vite dev server.", 404);
+  }
+  return c.html(indexHtml);
 });
 
 const port = Number(process.env.PORT) || 3001;

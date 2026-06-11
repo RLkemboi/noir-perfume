@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Package, Clock, CheckCircle2, ChevronRight, Filter, Truck, LogOut, ArrowLeft } from "lucide-react";
@@ -13,7 +13,7 @@ export default function OperatorDashboard() {
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<number | null>(null);
 
-  const fetchQueue = async () => {
+  const fetchQueue = useCallback(async () => {
     try {
       const token = await getIdToken();
       const res = await fetch("/api/operator/queue", {
@@ -28,11 +28,11 @@ export default function OperatorDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [getIdToken]);
 
   useEffect(() => {
     fetchQueue();
-  }, []);
+  }, [fetchQueue]);
 
   const handleAdvance = async (orderId: number) => {
     setProcessingId(orderId);

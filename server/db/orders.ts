@@ -1,5 +1,16 @@
 import { db, canUseFirestore, disableFirestore } from "./firebase.js";
-import type { CartItem, Order, ShippingDetails, OrderStatus, PaymentMethod, PaymentHistoryEntry, PaymentStatus } from "../types.js";
+import type {
+  CartItem,
+  Order,
+  ShippingDetails,
+  OrderStatus,
+  PaymentMethod,
+  PaymentHistoryEntry,
+  PaymentStatus,
+  OrderAuditEntry,
+  RefundEntry,
+  RefundStatus,
+} from "../types.js";
 
 const memoryOrders = new Map<number, Order>();
 let memoryOrderId = 0;
@@ -29,10 +40,19 @@ interface CreateOrderOptions {
   paymentPromptCount?: number;
   paymentPromptRequestedAt?: string;
   paymentReference?: string;
+  inventoryReservedAt?: string;
 }
 
 function makePaymentId(): string {
   return `pay_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function createAuditEntry(entry: Omit<OrderAuditEntry, "id" | "createdAt">): OrderAuditEntry {
+  return {
+    id: crypto.randomUUID(),
+    createdAt: new Date().toISOString(),
+    ...entry,
+  };
 }
 
 function normalizeOrder(order: Order): Order {
@@ -59,7 +79,10 @@ function normalizeOrder(order: Order): Order {
       (paymentMethod === "Card"
         ? [{ paymentId: makePaymentId(), amount: order.total, timestamp: Date.now(), method: paymentMethod, status: "success" } satisfies PaymentHistoryEntry]
         : []),
+    refundStatus: order.refundStatus ?? "None",
+    refundEntries: order.refundEntries ?? [],
     statusHistory: order.statusHistory || [],
+    auditTrail: order.auditTrail || [],
     customerDeliveryConfirmed: order.customerDeliveryConfirmed ?? false,
     agentDeliveryConfirmed: order.agentDeliveryConfirmed ?? false,
     adminDeliveryConfirmed: order.adminDeliveryConfirmed ?? false,
@@ -115,6 +138,16 @@ function createMemoryOrder(
     paymentPromptRequestedAt: options.paymentPromptRequestedAt,
     paymentPromptCount: initialPromptCount,
     paymentHistory: initialPaymentHistory,
+    refundStatus: "None",
+    refundEntries: [],
+    inventoryReservedAt: options.inventoryReservedAt,
+    auditTrail: [
+      createAuditEntry({
+        type: "created",
+        message: `Order ${memoryOrderId} created.`,
+        metadata: { paymentMethod, total },
+      }),
+    ],
     customerDeliveryConfirmed: false,
     agentDeliveryConfirmed: false,
     adminDeliveryConfirmed: false,
@@ -186,6 +219,16 @@ export async function createOrder(
         paymentPromptRequestedAt: options.paymentPromptRequestedAt,
         paymentPromptCount: initialPromptCount,
         paymentHistory: initialPaymentHistory,
+        refundStatus: "None",
+        refundEntries: [],
+        inventoryReservedAt: options.inventoryReservedAt,
+        auditTrail: [
+          createAuditEntry({
+            type: "created",
+            message: `Order ${orderId} created.`,
+            metadata: { paymentMethod, total },
+          }),
+        ],
         customerDeliveryConfirmed: false,
         agentDeliveryConfirmed: false,
         adminDeliveryConfirmed: false,
@@ -240,25 +283,28 @@ export async function cancelOrder(orderId: number, cancellationMessage: string):
   const order = await getOrderById(orderId);
   if (!order) return null;
 
-  if (order.status !== "Cancelled") {
-    order.status = "Cancelled";
-    order.statusHistory = [...(order.statusHistory || []), { status: "Cancelled", date: now }];
+  if (order.status === "Cancelled") {
+    return order;
   }
 
+  order.status = "Cancelled";
+  order.statusHistory = [...(order.statusHistory || []), { status: "Cancelled", date: now }];
   order.cancelledAt = now;
   order.cancellationMessage = cancellationMessage;
-  order.paymentStatus = "Unpaid";
-  order.amountPaid = 0;
-  order.amountDue = 0;
-  order.paymentHistory = [];
   order.paymentPromptCount = 0;
   order.paymentPromptRequestedAt = undefined;
   order.paymentRequestedAt = undefined;
   order.paymentLastError = cancellationMessage;
   order.mpesaMerchantRequestId = undefined;
   order.mpesaCheckoutRequestId = undefined;
-  order.mpesaReceiptNumber = undefined;
-  order.paymentReference = undefined;
+  order.auditTrail = [
+    createAuditEntry({
+      type: "cancelled",
+      message: cancellationMessage,
+      metadata: { previousStatus: order.statusHistory.at(-2)?.status ?? "Pending" },
+    }),
+    ...(order.auditTrail || []),
+  ];
 
   return saveOrder(orderId, order);
 }
@@ -457,6 +503,13 @@ export async function confirmAgentDelivery(orderId: number): Promise<Order | nul
     order.status = "Delivered";
     order.statusHistory = [...(order.statusHistory || []), { status: "Delivered", date: now }];
   }
+  order.auditTrail = [
+    createAuditEntry({
+      type: "delivery_confirmed",
+      message: "Delivery agent confirmed handoff.",
+    }),
+    ...(order.auditTrail || []),
+  ];
 
   return saveOrder(orderId, order);
 }
@@ -468,6 +521,13 @@ export async function confirmCustomerDelivery(orderId: number): Promise<Order | 
 
   order.customerDeliveryConfirmed = true;
   order.customerDeliveryConfirmedAt = now;
+  order.auditTrail = [
+    createAuditEntry({
+      type: "delivery_confirmed",
+      message: "Customer confirmed receipt.",
+    }),
+    ...(order.auditTrail || []),
+  ];
 
   return saveOrder(orderId, order);
 }
@@ -479,6 +539,13 @@ export async function confirmAdminDelivery(orderId: number): Promise<Order | nul
 
   order.adminDeliveryConfirmed = true;
   order.adminDeliveryConfirmedAt = now;
+  order.auditTrail = [
+    createAuditEntry({
+      type: "admin_finalized",
+      message: "Administrator finalized delivery.",
+    }),
+    ...(order.auditTrail || []),
+  ];
 
   return saveOrder(orderId, order);
 }
@@ -490,7 +557,95 @@ export async function requestPaymentPrompt(orderId: number): Promise<Order | nul
 
   order.paymentPromptRequestedAt = now;
   order.paymentPromptCount = (order.paymentPromptCount || 0) + 1;
+  order.auditTrail = [
+    createAuditEntry({
+      type: "payment_prompt_requested",
+      message: "Customer requested a payment prompt.",
+      metadata: { promptCount: order.paymentPromptCount },
+    }),
+    ...(order.auditTrail || []),
+  ];
 
+  return saveOrder(orderId, order);
+}
+
+export async function patchOrder(orderId: number, updates: Partial<Order>): Promise<Order | null> {
+  const order = await getOrderById(orderId);
+  if (!order) return null;
+  Object.assign(order, updates, { updatedAt: new Date().toISOString() });
+  return saveOrder(orderId, order);
+}
+
+export async function appendOrderAudit(orderId: number, entry: Omit<OrderAuditEntry, "id" | "createdAt">): Promise<Order | null> {
+  const order = await getOrderById(orderId);
+  if (!order) return null;
+  order.auditTrail = [createAuditEntry(entry), ...(order.auditTrail || [])];
+  return saveOrder(orderId, order);
+}
+
+export async function markInventoryRestored(orderId: number): Promise<Order | null> {
+  return patchOrder(orderId, { inventoryRestoredAt: new Date().toISOString() });
+}
+
+export async function markInventoryReserved(orderId: number): Promise<Order | null> {
+  return patchOrder(orderId, { inventoryReservedAt: new Date().toISOString() });
+}
+
+export async function recordRefund(
+  orderId: number,
+  refund: RefundEntry,
+  refundStatus: RefundStatus
+): Promise<Order | null> {
+  const order = await getOrderById(orderId);
+  if (!order) return null;
+  order.refundEntries = [refund, ...(order.refundEntries || [])];
+  order.refundStatus = refundStatus;
+  order.paymentStatus =
+    refundStatus === "Reversed"
+      ? "Refunded"
+      : refundStatus === "PartiallyReversed"
+        ? "PartiallyRefunded"
+        : order.paymentStatus;
+  order.auditTrail = [
+    createAuditEntry({
+      type: "refund_recorded",
+      message: `Refund recorded via ${refund.channel}.`,
+      metadata: { amount: refund.amount, status: refund.status },
+    }),
+    ...(order.auditTrail || []),
+  ];
+  return saveOrder(orderId, order);
+}
+
+export async function markLoyaltyAwarded(orderId: number): Promise<Order | null> {
+  const order = await getOrderById(orderId);
+  if (!order) return null;
+  if (order.loyaltyAwardedAt) return order;
+  order.loyaltyAwardedAt = new Date().toISOString();
+  order.auditTrail = [
+    createAuditEntry({
+      type: "loyalty_awarded",
+      message: "Loyalty credit awarded for this order.",
+      metadata: { total: order.total },
+    }),
+    ...(order.auditTrail || []),
+  ];
+  return saveOrder(orderId, order);
+}
+
+export async function markLoyaltyReversed(orderId: number): Promise<Order | null> {
+  const order = await getOrderById(orderId);
+  if (!order) return null;
+  if (order.loyaltyReversedAt) return order;
+  order.loyaltyReversedAt = new Date().toISOString();
+  order.auditTrail = [
+    createAuditEntry({
+      type: "loyalty_reversed",
+      message: "Loyalty credit reversed for this order.",
+      metadata: { total: order.total },
+    }),
+    ...(order.auditTrail || []),
+  ];
   return saveOrder(orderId, order);
 }
 
@@ -539,6 +694,14 @@ export async function recordOrderPayment(
   };
   order.paymentHistory = [...(order.paymentHistory || []), entry];
   order.paymentLastError = undefined;
+  order.auditTrail = [
+    createAuditEntry({
+      type: "payment_recorded",
+      message: "Payment recorded against order.",
+      metadata: { amount: normalizedAmount, method: entry.method },
+    }),
+    ...(order.auditTrail || []),
+  ];
 
   return saveOrder(orderId, order);
 }

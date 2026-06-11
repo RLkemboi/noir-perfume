@@ -8,9 +8,9 @@ import type { Order } from "../../server/types";
 
 function getOrderDate(order: Order) {
   const candidate =
-    order.adminDeliveryConfirmedAt ||
-    order.customerDeliveryConfirmedAt ||
-    order.agentDeliveryConfirmedAt ||
+    (typeof order.adminDeliveryConfirmed === 'string' ? order.adminDeliveryConfirmed : undefined) ||
+    (typeof order.customerDeliveryConfirmed === 'string' ? order.customerDeliveryConfirmed : undefined) ||
+    (typeof order.agentDeliveryConfirmed === 'string' ? order.agentDeliveryConfirmed : undefined) ||
     order.createdAt;
 
   return candidate ? new Date(candidate) : null;
