@@ -4,7 +4,9 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: npm install && npm run build:server && npm run build
+    # --include=dev is required: NODE_ENV=production makes npm skip the
+    # devDependencies (typescript, vite, tsx) that the build itself needs.
+    buildCommand: npm install --include=dev && npm run build:server && npm run build
     startCommand: npm run start
     envVars:
       - key: NODE_ENV
