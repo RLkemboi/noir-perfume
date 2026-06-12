@@ -3,7 +3,12 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, Star, Clock, Volume2, Gem, History, ShoppingBag, ShieldCheck } from "lucide-react";
 import { products, type Product } from "@/data";
+import { SIZE_TIERS, DEFAULT_TIER, tierPrice, type SizeTier } from "@/data/sizeTiers";
 import { rankProducts } from "@/utils/productRanking";
+import { parsePrice, formatMoney, perDayLine } from "@/utils/pricing";
+import { SCENT_OF_THE_WEEK_ID, scarcityLabel } from "@/config/storefront";
+import { FeaturedBadge } from "@/components/ui/FeaturedBadge";
+import { ExchangeNotice } from "@/components/ui/ExchangeNotice";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
 import { useSEO, buildProductSchema } from "@/hooks/useSEO";
@@ -38,6 +43,7 @@ export default function ProductDetail() {
   const navigate = useNavigate();
   const { addItem } = useCart();
   const [remote, setRemote] = useState<{ id: string; product: Product | null } | null>(null);
+  const [tier, setTier] = useState<SizeTier>(DEFAULT_TIER);
 
   const localProduct = products.find((p) => p.id === id) ?? null;
   const product = localProduct ?? (remote && remote.id === id ? remote.product : null);
@@ -85,10 +91,11 @@ export default function ProductDetail() {
       productId: product.id,
       name: product.name,
       brand: product.brand,
-      price: product.price,
+      price: formatMoney(tierPrice(parsePrice(product.price), tier)),
       image: product.image,
+      size: tier.size,
     });
-    toast.success(`${product.name} added to bag`, {
+    toast.success(`${product.name} (${tier.label} ${tier.size}) added to bag`, {
       icon: <ShieldCheck className="w-4 h-4 text-primary" />,
       className: "glass-panel border-primary/20",
     });
@@ -152,7 +159,8 @@ export default function ProductDetail() {
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-background/60 via-transparent to-transparent" />
-              <div className="absolute top-6 left-6 flex flex-col gap-2">
+              <div className="absolute top-6 left-6 flex flex-col items-start gap-2">
+                {product.id === SCENT_OF_THE_WEEK_ID && <FeaturedBadge />}
                 {product.collection === "Limited" && (
                   <div className="flex items-center gap-1.5 px-3 py-1 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold rounded-full luxury-shadow">
                     <Gem className="w-3 h-3" /> Limited
@@ -176,9 +184,14 @@ export default function ProductDetail() {
                 <p className="text-muted-foreground text-sm font-sans tracking-wider uppercase mb-4">
                   {product.subtitle}
                 </p>
-                <p className="font-serif text-3xl gold-text font-bold">{product.price}</p>
+                {scarcityLabel(product) && (
+                  <p className="text-primary text-[10px] tracking-[0.2em] uppercase font-sans font-bold">
+                    {scarcityLabel(product)}
+                  </p>
+                )}
               </div>
 
+              {/* Story and notes lead; the price reveals at the format selector below. */}
               <p className="text-muted-foreground text-base font-sans leading-relaxed italic">
                 "{product.description}"
               </p>
@@ -200,13 +213,51 @@ export default function ProductDetail() {
                 <Meter label="Sillage" value={product.sillage} icon={<Volume2 className="w-3.5 h-3.5" />} />
               </div>
 
+              {/* Format selector — Collector's listed first as the price anchor */}
+              <div className="space-y-3">
+                <p className="text-primary text-[10px] tracking-[0.25em] uppercase font-sans font-semibold">Choose Your Format</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {SIZE_TIERS.map((option) => {
+                    const price = tierPrice(parsePrice(product.price), option);
+                    const active = tier.key === option.key;
+                    return (
+                      <button
+                        key={option.key}
+                        onClick={() => setTier(option)}
+                        aria-pressed={active}
+                        className={`relative p-4 text-left border transition-colors ${
+                          active
+                            ? "border-primary bg-primary/10"
+                            : option.recommended
+                              ? "border-primary/40 hover:border-primary"
+                              : "border-border hover:border-primary/40"
+                        }`}
+                      >
+                        {option.recommended && (
+                          <span className="absolute -top-2.5 left-3 px-2 py-0.5 bg-primary text-primary-foreground text-[9px] tracking-widest uppercase font-bold rounded-full">
+                            Most Chosen
+                          </span>
+                        )}
+                        <p className="text-[10px] tracking-[0.2em] uppercase font-sans font-semibold text-muted-foreground">{option.label}</p>
+                        <p className="font-serif text-lg font-bold">{option.size}</p>
+                        <p className="font-serif gold-text font-bold">{formatMoney(price)}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-muted-foreground text-[11px] font-sans">{perDayLine(tierPrice(parsePrice(product.price), tier))}</p>
+              </div>
+
               {/* Add to bag */}
-              <button
-                onClick={handleAdd}
-                className="w-full sm:w-auto px-10 py-4 bg-primary text-primary-foreground text-xs tracking-[0.2em] uppercase font-sans font-bold hover:bg-gold-light transition-all duration-300 luxury-shadow flex items-center justify-center gap-3"
-              >
-                <ShoppingBag className="w-4 h-4" /> Add to Bag — {product.price}
-              </button>
+              <div className="space-y-3">
+                <button
+                  onClick={handleAdd}
+                  className="w-full sm:w-auto px-10 py-4 bg-primary text-primary-foreground text-xs tracking-[0.2em] uppercase font-sans font-bold hover:bg-gold-light transition-all duration-300 luxury-shadow flex items-center justify-center gap-3"
+                >
+                  <ShoppingBag className="w-4 h-4" /> Add to Bag — {tier.label} {tier.size} · {formatMoney(tierPrice(parsePrice(product.price), tier))}
+                </button>
+                <ExchangeNotice />
+              </div>
             </div>
           </div>
 

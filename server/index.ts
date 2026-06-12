@@ -17,6 +17,7 @@ import {
 } from "./controllers/product.controller.js";
 import { adminAuthMiddleware } from "./middleware/auth.js";
 import { products as seededProducts } from "./data/products.js";
+import { findTierBySize, tierPrice } from "./data/sizeTiers.js";
 import type { CartItem, Order, OrderStatus, PaymentMethod, ShippingDetails, UserRole, UserTier, RefundEntry } from "./types.js";
 import { getCart, setCart, deleteCart } from "./db/carts.js";
 import { 
@@ -578,6 +579,7 @@ app.post("/api/cart/:sessionId", async (c) => {
     brand: string;
     price: string;
     image: string;
+    size?: string;
   };
   try {
     body = await c.req.json();
@@ -591,8 +593,10 @@ app.post("/api/cart/:sessionId", async (c) => {
 
   let items: CartItem[];
   if (existing) {
+    // One line per product: a re-add with a different size switches the line
+    // to the latest selection (cart is keyed by productId end-to-end).
     items = current.map((i) =>
-      i.productId === body.productId ? { ...i, quantity: i.quantity + qty } : i
+      i.productId === body.productId ? { ...i, ...body, quantity: i.quantity + qty } : i
     );
   } else {
     items = [...current, { ...body, quantity: qty }];
@@ -691,7 +695,10 @@ app.post("/api/checkout", async (c) => {
     if (product.stockQuantity < qty) {
       throw new HTTPException(409, { message: `${product.name} only has ${product.stockQuantity} unit(s) left in stock.` });
     }
-    const price = Number(product.price);
+    // Server-side pricing: catalog base price scaled by the bottle format.
+    // Unknown or missing sizes price as Signature (multiplier 1).
+    const tier = findTierBySize(item.size);
+    const price = tierPrice(Number(product.price), tier);
     const primaryImage = product.images.find((image) => image.isPrimary) || product.images[0];
     total += price * qty;
     validatedItems.push({
@@ -701,6 +708,7 @@ app.post("/api/checkout", async (c) => {
       price: `$${price.toFixed(2)}`,
       image: primaryImage?.url || "",
       quantity: qty,
+      size: tier.size,
     });
   }
 

@@ -70,6 +70,9 @@ export const CartDrawer = () => {
                             {item.brand}
                           </p>
                           <h4 className="font-serif font-bold truncate">{item.name}</h4>
+                          {item.size && (
+                            <p className="text-[10px] text-muted-foreground tracking-widest uppercase">{item.size}</p>
+                          )}
                         </div>
                         <button
                           onClick={() => removeItem(item.productId)}

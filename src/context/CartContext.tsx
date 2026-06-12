@@ -7,6 +7,8 @@ export interface CartItem {
   price: string;
   image: string;
   quantity: number;
+  /** Bottle format (e.g. "50ml"). Missing means Signature — the pre-tier default. */
+  size?: string;
 }
 
 interface CartContextType {
@@ -97,8 +99,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setItems((prev) => {
       const existing = prev.find((i) => i.productId === item.productId);
       if (existing) {
+        // One line per product; the latest selected size/price wins
+        // (mirrors the server cart merge).
         return prev.map((i) =>
-          i.productId === item.productId ? { ...i, quantity: i.quantity + 1 } : i
+          i.productId === item.productId ? { ...i, ...item, quantity: i.quantity + 1 } : i
         );
       }
       return [...prev, { ...item, quantity: 1 }];

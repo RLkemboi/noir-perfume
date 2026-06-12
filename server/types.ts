@@ -117,6 +117,8 @@ export interface CartItem {
   price: string;
   image: string;
   quantity: number;
+  /** Bottle format (e.g. "50ml"). Missing means Signature — the pre-tier default. */
+  size?: string;
 }
 
 export interface ShippingDetails {
