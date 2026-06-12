@@ -10,6 +10,7 @@ import Index from "./pages/Index.tsx";
 import { Shield } from "lucide-react";
 
 // Route-level code splitting: only the landing page ships in the main bundle.
+const Catalogue = lazy(() => import("./pages/Catalogue.tsx"));
 const Login = lazy(() => import("./pages/Login.tsx"));
 const Signup = lazy(() => import("./pages/Signup.tsx"));
 const Dashboard = lazy(() => import("./pages/Dashboard.tsx"));
@@ -189,6 +190,7 @@ const App = () => (
             <Suspense fallback={null}>
             <Routes>
               <Route path="/" element={<Index />} />
+              <Route path="/collection" element={<Catalogue />} />
               <Route path="/login" element={<GuestRoute><Login /></GuestRoute>} />
               <Route path="/signup" element={<GuestRoute><Signup /></GuestRoute>} />
               <Route path="/dashboard" element={<AuthRoute allowGuest allowedRoles={["Customer"]}><Dashboard /></AuthRoute>} />

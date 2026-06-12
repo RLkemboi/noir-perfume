@@ -6,8 +6,8 @@ import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import SearchOverlay from "./SearchOverlay";
 import { TierBadge } from "./ui/TierBadge";
+import { SCENT_FAMILIES } from "@/config/storefront";
 
-const scentProfiles = ["Oud & Leather", "Amber & Spice", "Fresh & Aquatic", "Floral & Powdery"];
 const moods = ["Boardroom", "Evening Affair", "Intimate", "Weekend Escape"];
 
 const Header = () => {
@@ -39,11 +39,14 @@ const Header = () => {
           >
             Collections <ChevronDown className="w-3 h-3" />
           </button>
-          <a href="#scent-finder" className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors">
+          <Link to="/collection" className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors">
+            The Collection
+          </Link>
+          <a href="/#scent-finder" className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors">
             Scent Finder
           </a>
-          <a href="#products" className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors">
-            Bestsellers
+          <a href="/#products" className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors">
+            Editor's Picks
           </a>
           <a href="#story" className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors">
             Our Story
@@ -107,9 +110,15 @@ const Header = () => {
               <div>
                 <h4 className="text-primary text-xs tracking-[0.2em] uppercase mb-4 font-sans font-semibold">By Scent Profile</h4>
                 <ul className="space-y-3">
-                  {scentProfiles.map((s) => (
-                    <li key={s}>
-                      <span className="text-foreground/70 text-sm">{s}</span>
+                  {SCENT_FAMILIES.map((family) => (
+                    <li key={family.key}>
+                      <Link
+                        to={`/collection?family=${family.key}`}
+                        onClick={() => setMegaOpen(false)}
+                        className="text-foreground/70 text-sm hover:text-primary transition-colors"
+                      >
+                        {family.title} · {family.technical}
+                      </Link>
                     </li>
                   ))}
                 </ul>
@@ -149,9 +158,9 @@ const Header = () => {
             className="lg:hidden glass-panel border-t-0 overflow-hidden"
           >
             <nav className="flex flex-col px-6 py-6 gap-4">
-              <a href="#products" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Collections</a>
-              <a href="#scent-finder" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Scent Finder</a>
-              <a href="#products" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Bestsellers</a>
+              <Link to="/collection" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">The Collection</Link>
+              <a href="/#scent-finder" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Scent Finder</a>
+              <a href="/#products" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Editor's Picks</a>
               <a href="#story" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Our Story</a>
               <Link
                 to={user || isGuest ? "/dashboard" : "/login"}

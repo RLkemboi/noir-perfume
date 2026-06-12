@@ -1,6 +1,9 @@
+import { Link } from "react-router-dom";
+import { SCENT_FAMILIES, EXCHANGE_WINDOW_DAYS } from "@/config/storefront";
+
 const Footer = () => {
   return (
-    <footer id="story" className="bg-background border-t border-border py-16">
+    <footer className="bg-background border-t border-border py-16">
       <div className="container mx-auto px-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
           <div>
@@ -12,11 +15,19 @@ const Footer = () => {
           <div>
             <h4 className="text-primary text-xs tracking-[0.2em] uppercase mb-4 font-sans font-semibold">Shop</h4>
             <ul className="space-y-2">
-              {["All Fragrances", "For Him", "For Her", "Discovery Sets", "Gift Sets"].map((l) => (
-                <li key={l}>
-                  <a href="#products" className="text-muted-foreground hover:text-primary text-sm font-sans transition-colors">
-                    {l}
-                  </a>
+              <li>
+                <Link to="/collection" className="text-muted-foreground hover:text-primary text-sm font-sans transition-colors">
+                  The Full Collection
+                </Link>
+              </li>
+              {SCENT_FAMILIES.map((family) => (
+                <li key={family.key}>
+                  <Link
+                    to={`/collection?family=${family.key}`}
+                    className="text-muted-foreground hover:text-primary text-sm font-sans transition-colors"
+                  >
+                    {family.technical}
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -41,6 +52,10 @@ const Footer = () => {
           </div>
         </div>
         <div className="line-gold mb-6" />
+        <p className="text-muted-foreground/70 text-xs font-sans text-center sm:text-left mb-6">
+          Every NOIR order carries our exchange promise: not the right scent? Exchange it within{" "}
+          {EXCHANGE_WINDOW_DAYS} days. We don't offer refunds — we offer a better match.
+        </p>
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-muted-foreground text-xs font-sans">© 2026 NOIR. All rights reserved.</p>
           <div className="flex gap-6">

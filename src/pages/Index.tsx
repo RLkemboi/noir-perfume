@@ -1,8 +1,10 @@
 import { motion } from "framer-motion";
 import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
+import TrustStrip from "@/components/TrustStrip";
 import ScentFinder from "@/components/ScentFinder";
 import ProductShowcase from "@/components/ProductShowcase";
+import PricingTiers from "@/components/PricingTiers";
 import ReviewSection from "@/components/ReviewSection";
 import Footer from "@/components/Footer";
 import { useSEO } from "@/hooks/useSEO";
@@ -24,10 +26,14 @@ const Index = () => {
         animate={{ opacity: 1 }}
         transition={{ duration: 1 }}
       >
+        {/* Order is deliberate: trust before product, testimonials before price,
+            and the scent finder closes the page (recency) — keep it last. */}
         <HeroSection />
-        <ScentFinder />
+        <TrustStrip />
         <ProductShowcase />
         <ReviewSection />
+        <PricingTiers />
+        <ScentFinder />
       </motion.main>
       
       <Footer />
