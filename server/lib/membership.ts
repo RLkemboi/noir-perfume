@@ -189,9 +189,16 @@ export function getTierProgress(totalSpent: number, completedOrderCount: number)
   };
 }
 
+/**
+ * Customers earn 5% of every shilling spent as Noir Points. The tier
+ * multiplier boosts that base rate slightly (Junior 1x = exactly 5%,
+ * Black 1.65x = 8.25%) — it does not replace it.
+ */
+export const LOYALTY_BASE_RATE = 0.05;
+
 export function calculateLoyaltyPoints(amount: number, tier: UserTier): number {
   const policy = getTierPolicy(tier);
-  return Number((amount * policy.pointsMultiplier).toFixed(2));
+  return Number((amount * LOYALTY_BASE_RATE * policy.pointsMultiplier).toFixed(2));
 }
 
 export function canUseLedger(profile: Pick<UserProfile, "tier">): boolean {

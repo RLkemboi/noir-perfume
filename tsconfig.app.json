@@ -28,5 +28,5 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "server/types.ts", "server/data/products.ts", "server/data/sizeTiers.ts"]
+  "include": ["src", "server/types.ts", "server/data/products.ts", "server/data/sizeTiers.ts", "server/lib/membership.ts"]
 }
