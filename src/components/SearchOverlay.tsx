@@ -2,7 +2,8 @@ import { useState, useMemo, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, SlidersHorizontal } from "lucide-react";
-import { products, brands } from "@/data";
+import { useStorefrontProducts } from "@/hooks/useStorefrontProducts";
+import { rankProducts } from "@/utils/productRanking";
 
 interface SearchOverlayProps {
   open: boolean;
@@ -13,6 +14,7 @@ const SearchOverlay = ({ open, onClose }: SearchOverlayProps) => {
   const [query, setQuery] = useState("");
   const [selectedBrand, setSelectedBrand] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const { products, brands } = useStorefrontProducts();
 
   useEffect(() => {
     if (!open) return;
@@ -33,7 +35,7 @@ const SearchOverlay = ({ open, onClose }: SearchOverlayProps) => {
   }, [onClose]);
 
   const results = useMemo(() => {
-    return products.filter((p) => {
+    const matches = products.filter((p) => {
       const matchesBrand = selectedBrand ? p.brand === selectedBrand : true;
       const q = query.toLowerCase();
       const matchesQuery = q
@@ -46,7 +48,8 @@ const SearchOverlay = ({ open, onClose }: SearchOverlayProps) => {
         : true;
       return matchesBrand && matchesQuery;
     });
-  }, [query, selectedBrand]);
+    return rankProducts(matches, { hasActiveCategory: Boolean(query || selectedBrand) });
+  }, [products, query, selectedBrand]);
 
   return (
     <AnimatePresence>

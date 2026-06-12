@@ -13,8 +13,8 @@ const HeroSection = () => {
       {/* Hero image */}
       <div className="absolute inset-0 flex items-center justify-center">
         <motion.img
-          src="/assets/hero-perfume.jpg"
-          alt="Luxury perfume with raw ingredients"
+          src="/assets/ysl-tuxedo.jpg"
+          alt="Yves Saint Laurent Tuxedo flacon against black silk and raw spices"
           className="w-full h-full object-cover opacity-40"
           initial={{ scale: 1.1 }}
           animate={{ scale: 1 }}

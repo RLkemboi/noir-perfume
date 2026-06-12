@@ -2,7 +2,8 @@ import { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Flame, Wind, Sparkles, Crown, Moon, Briefcase, Heart, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { products } from "@/data";
+import { useStorefrontProducts } from "@/hooks/useStorefrontProducts";
+import { promotionScore } from "@/utils/productRanking";
 
 interface QuizOption {
   label: string;
@@ -48,13 +49,14 @@ const ScentFinder = () => {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<string[]>([]);
   const [complete, setComplete] = useState(false);
+  const { products } = useStorefrontProducts();
 
   const matchedProduct = useMemo(() => {
-    if (!complete || answers.length < 3) return null;
-    
+    if (!complete || answers.length < 3 || products.length === 0) return null;
+
     const [drive, element, occasion] = answers;
-    
-    // Scoring system
+
+    // Scoring system; ties resolved by popularity with a slight price bias.
     const scores = products.map(product => {
       let score = 0;
       if (product.tags.drive === drive) score += 3;
@@ -63,8 +65,10 @@ const ScentFinder = () => {
       return { product, score };
     });
 
-    return scores.sort((a, b) => b.score - a.score)[0].product;
-  }, [complete, answers]);
+    return scores.sort(
+      (a, b) => b.score - a.score || promotionScore(b.product, products) - promotionScore(a.product, products)
+    )[0].product;
+  }, [complete, answers, products]);
 
   const handleSelect = (value: string) => {
     const newAnswers = [...answers, value];

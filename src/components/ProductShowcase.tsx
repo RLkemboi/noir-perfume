@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star, Clock, Volume2, ShieldCheck, Gem, History, ArrowUpRight } from "lucide-react";
 import { useCart } from "@/context/CartContext";
@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Link } from "react-router-dom";
 import { MarqueeBand } from "./MarqueeBand";
 import { useStorefrontProducts } from "@/hooks/useStorefrontProducts";
+import { rankProducts } from "@/utils/productRanking";
 import type { StorefrontProduct as Product } from "@/utils/storefrontProductAdapter";
 
 const Meter = ({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) => (
@@ -162,11 +163,15 @@ const ProductShowcase = () => {
   const [activeCollection, setActiveCollection] = useState<string | null>(null);
   const { products, brands, collections, isLoading } = useStorefrontProducts();
 
-  const filtered = products.filter((p) => {
-    const brandMatch = activeBrand ? p.brand === activeBrand : true;
-    const collectionMatch = activeCollection ? p.collection === activeCollection : true;
-    return brandMatch && collectionMatch;
-  });
+  const hasActiveCategory = Boolean(activeBrand || activeCollection);
+  const filtered = useMemo(() => {
+    const matches = products.filter((p) => {
+      const brandMatch = activeBrand ? p.brand === activeBrand : true;
+      const collectionMatch = activeCollection ? p.collection === activeCollection : true;
+      return brandMatch && collectionMatch;
+    });
+    return rankProducts(matches, { hasActiveCategory });
+  }, [products, activeBrand, activeCollection, hasActiveCategory]);
 
   return (
     <section id="products" className="py-32 bg-background relative overflow-hidden">

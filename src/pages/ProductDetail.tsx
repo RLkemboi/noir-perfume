@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { ArrowLeft, Star, Clock, Volume2, Gem, History, ShoppingBag, ShieldCheck } from "lucide-react";
 import { products, type Product } from "@/data";
+import { rankProducts } from "@/utils/productRanking";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
 import { useSEO, buildProductSchema } from "@/hooks/useSEO";
@@ -120,9 +121,10 @@ export default function ProductDetail() {
     );
   }
 
-  const related = products
-    .filter((p) => p.id !== product.id && (p.brand === product.brand || p.collection === product.collection))
-    .slice(0, 4);
+  const related = rankProducts(
+    products.filter((p) => p.id !== product.id && (p.brand === product.brand || p.collection === product.collection)),
+    { hasActiveCategory: true }
+  ).slice(0, 4);
 
   return (
     <div className="min-h-screen bg-background pt-24 pb-16 px-4">

@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { productService } from "@/services/product.service";
 import { products as seededProducts } from "@/data";
 import { mapManagedProductToStorefront, type StorefrontProduct } from "@/utils/storefrontProductAdapter";
+import { filterDefaultCatalog } from "@/utils/productRanking";
 
 function collectBrands(items: StorefrontProduct[]): string[] {
   return [...new Set(items.map((item) => item.brand))];
@@ -26,8 +27,9 @@ export function useStorefrontProducts() {
   });
 
   const mappedProducts = useMemo<StorefrontProduct[]>(() => {
-    if (!query.data || query.data.length === 0) return seededProducts;
-    return query.data.map(mapManagedProductToStorefront);
+    const items =
+      !query.data || query.data.length === 0 ? seededProducts : query.data.map(mapManagedProductToStorefront);
+    return filterDefaultCatalog(items);
   }, [query.data]);
 
   const brands = useMemo(() => collectBrands(mappedProducts), [mappedProducts]);
