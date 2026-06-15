@@ -22,7 +22,7 @@ const Header = () => {
       <div className="container mx-auto px-6 py-4 flex items-center justify-between">
         {/* Logo */}
         <Link to="/" aria-label="NOIR home">
-          <img src="/assets/noir-logo.svg" alt="NOIR" className="h-10 w-auto" />
+          <img src="/assets/noir-logo-1.svg" alt="NOIR" className="h-10 w-auto" />
         </Link>
 
         {/* Desktop Nav */}
