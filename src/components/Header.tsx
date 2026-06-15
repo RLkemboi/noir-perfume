@@ -23,6 +23,15 @@ const Header = () => {
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-header">
       <div className="container mx-auto px-6 py-4 flex items-center gap-8">
+        {/* Logo */}
+        <Link to="/" className="shrink-0 mr-6" aria-label="NOIR home">
+          <img
+            src="/assets/noir-logo-1.svg"
+            alt="NOIR"
+            className="h-10 md:h-[65px] w-auto object-contain"
+          />
+        </Link>
+
         {/* Nav links — desktop */}
         <nav className="hidden lg:flex items-center gap-8 flex-1">
           {NAV_LINKS.map(({ label, to, href }) =>

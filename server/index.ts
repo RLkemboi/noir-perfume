@@ -54,6 +54,7 @@ import { addSystemLog, getSystemLogs } from "./db/logs.js";
 import { initiateMpesaStkPush, normalizeMpesaPhone } from "./mpesa.js";
 import { canUseLedger, evaluatePaymentPolicy, getTierPolicy, getTierProgress } from "./lib/membership.js";
 import { adjustInventory, getProductById as getManagedProductById, getStorefrontProducts } from "./db/products.js";
+import { castVote, getProductVotes, aggregateVotes, VOTE_ATTRIBUTES, type VoteAttribute } from "./db/votes.js";
 
 const app = new Hono();
 
@@ -557,6 +558,110 @@ function buildFinancialSummary(orders: Awaited<ReturnType<typeof getOrders>>) {
     weeklyTrend,
   };
 }
+
+// ── Community Votes ───────────────────────────────────────────────────────────
+
+app.get("/api/products/:id/votes", async (c) => {
+  const productId = c.req.param("id");
+
+  const votes = await getProductVotes(productId);
+  const attributes = aggregateVotes(votes);
+
+  // Count unique voters
+  const voterSet = new Set(votes.map((v) => v.voterId));
+  const totalVoters = voterSet.size;
+
+  // Optionally resolve caller's own votes (soft auth — no error if missing)
+  const myVotes: Partial<Record<VoteAttribute, "yes" | "no">> = {};
+
+  const authHeader = c.req.header("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const sessionId = c.req.query("sessionId") || "";
+
+  let voterId: string | null = null;
+
+  if (token && auth) {
+    try {
+      const decoded = await auth.verifyIdToken(token);
+      voterId = decoded.uid;
+    } catch {
+      // soft auth — ignore invalid token
+    }
+  } else if (sessionId) {
+    voterId = sessionId;
+  }
+
+  if (voterId) {
+    const myVoteList = votes.filter((v) => v.voterId === voterId);
+    for (const v of myVoteList) {
+      myVotes[v.attribute] = v.vote;
+    }
+  }
+
+  return c.json({ attributes, totalVoters, myVotes });
+});
+
+app.post("/api/products/:id/votes", async (c) => {
+  const productId = c.req.param("id");
+
+  // Require auth OR sessionId
+  const authHeader = c.req.header("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  const sessionId = c.req.query("sessionId") || "";
+
+  let voterId: string | null = null;
+
+  if (token && auth) {
+    try {
+      const decoded = await auth.verifyIdToken(token);
+      voterId = decoded.uid;
+    } catch {
+      throw new HTTPException(401, { message: "Invalid token" });
+    }
+  } else if (sessionId) {
+    voterId = sessionId;
+  } else {
+    throw new HTTPException(401, { message: "Authentication or sessionId required to vote" });
+  }
+
+  let body: { attribute: VoteAttribute; vote: "yes" | "no" };
+  try {
+    body = await c.req.json();
+  } catch {
+    throw new HTTPException(400, { message: "Invalid JSON body" });
+  }
+
+  if (!VOTE_ATTRIBUTES.includes(body.attribute)) {
+    throw new HTTPException(400, { message: "Invalid vote attribute" });
+  }
+  if (body.vote !== "yes" && body.vote !== "no") {
+    throw new HTTPException(400, { message: "Vote must be 'yes' or 'no'" });
+  }
+
+  await castVote({
+    productId,
+    voterId,
+    attribute: body.attribute,
+    vote: body.vote,
+    updatedAt: new Date().toISOString(),
+  });
+
+  // Return updated aggregate
+  const votes = await getProductVotes(productId);
+  const attributes = aggregateVotes(votes);
+  const voterSet = new Set(votes.map((v) => v.voterId));
+  const totalVoters = voterSet.size;
+
+  const myVotes: Partial<Record<VoteAttribute, "yes" | "no">> = {};
+  const myVoteList = votes.filter((v) => v.voterId === voterId);
+  for (const v of myVoteList) {
+    myVotes[v.attribute] = v.vote;
+  }
+
+  return c.json({ attributes, totalVoters, myVotes });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 app.get("/api/cart/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
