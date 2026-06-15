@@ -70,6 +70,15 @@ export const CartDrawer = () => {
                             {item.brand}
                           </p>
                           <h4 className="font-serif font-bold truncate">{item.name}</h4>
+                          {item.variant === "original" ? (
+                            <p className="text-[10px] text-primary tracking-widest uppercase font-semibold truncate">
+                              Original
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-muted-foreground tracking-widest uppercase truncate">
+                              {item.variantLabel ?? `Our version of ${item.name}`}
+                            </p>
+                          )}
                           {item.size && (
                             <p className="text-[10px] text-muted-foreground tracking-widest uppercase">{item.size}</p>
                           )}

@@ -80,7 +80,7 @@ export default function Checkout() {
   const [savedAddresses, setSavedAddresses] = useState<SavedAddress[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
   const [saveAddressForFuture, setSaveAddressForFuture] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Card");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("Mpesa");
   const [upfrontAmountInput, setUpfrontAmountInput] = useState("");
   const [mpesaPhone, setMpesaPhone] = useState("");
   const [completionNote, setCompletionNote] = useState("Your luxury fragrance journey has begun.");
@@ -135,7 +135,7 @@ export default function Checkout() {
 
   useEffect(() => {
     if (!canPayOnDelivery && paymentMethod === "PayOnDelivery") {
-      setPaymentMethod("Card");
+      setPaymentMethod("Mpesa");
     }
   }, [canPayOnDelivery, paymentMethod]);
 
@@ -328,11 +328,13 @@ export default function Checkout() {
       persistSavedAddress();
       clearCart();
       setCompleted(true);
+      const deposit = data.depositAmount ?? Math.round(total * 0.5);
+      const balance = data.balanceDue ?? Math.round(total * 0.5);
       setCompletionNote(
         paymentMethod === "Mpesa"
           ? data.mpesa?.mock
-            ? data.mpesa?.customerMessage || "Sandbox payment completed successfully. Live credentials will replace this simulated charge later."
-            : data.mpesa?.customerMessage || "Check your phone and complete the M-Pesa STK prompt to finish payment."
+            ? `Deposit of ${fmtKES(deposit)} confirmed (sandbox). Balance of ${fmtKES(balance)} is due on delivery.`
+            : data.mpesa?.customerMessage || `STK push sent for deposit of ${fmtKES(deposit)}. Balance of ${fmtKES(balance)} is due on delivery.`
           : paymentMethod === "PayOnDelivery" && usesAccountBalance
             ? `Ledger charge posted. Upfront ${fmtKES(normalizedUpfrontAmount)}, remaining ${fmtKES(ledgerCharge)}. Projected balance: ${fmtKES(projectedAccountBalance)}.`
             : paymentMethod === "PayOnDelivery"
@@ -837,31 +839,51 @@ export default function Checkout() {
 
                   <div className="space-y-3">
                     <p className="text-xs tracking-widest uppercase text-muted-foreground font-bold">Payment Method</p>
-                    <button
-                      type="button"
-                      onClick={() => setPaymentMethod("Card")}
-                      className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors ${paymentMethod === "Card" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
-                    >
-                      Card / Existing Pay Now
-                    </button>
+
+                    {/* Card — Coming Soon (disabled) */}
+                    <div className="w-full flex items-center justify-between px-4 py-3 border border-border text-xs tracking-widest uppercase font-bold text-muted-foreground opacity-50 cursor-not-allowed">
+                      <span>Card</span>
+                      <span className="text-[9px] bg-secondary px-2 py-0.5 rounded">Coming Soon</span>
+                    </div>
+
+                    {/* M-Pesa — active */}
                     <button
                       type="button"
                       onClick={() => setPaymentMethod("Mpesa")}
-                      className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors ${paymentMethod === "Mpesa" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
+                      className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors ${paymentMethod === "Mpesa" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}
                     >
                       M-Pesa STK Push
                     </button>
+
+                    {/* Pay After Delivery */}
                     <button
                       type="button"
                       onClick={() => canPayOnDelivery && !payOnDeliveryBlocked && setPaymentMethod("PayOnDelivery")}
                       disabled={!canPayOnDelivery || payOnDeliveryBlocked}
-                      className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors disabled:opacity-50 ${paymentMethod === "PayOnDelivery" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground"}`}
+                      className={`w-full text-left px-4 py-3 border text-xs tracking-widest uppercase font-bold transition-colors disabled:opacity-50 ${paymentMethod === "PayOnDelivery" ? "border-primary bg-primary/5 text-primary" : "border-border text-muted-foreground hover:border-primary/40"}`}
                     >
                       {usesAccountBalance ? "Running Balance / Credit" : "Pay After Delivery"}
                     </button>
+
+                    {/* 50/50 split info for M-Pesa */}
+                    {paymentMethod === "Mpesa" && (
+                      <div className="rounded border border-primary/20 bg-primary/5 p-4 space-y-2 text-[11px] text-muted-foreground">
+                        <p className="font-bold text-primary tracking-widest uppercase text-[10px]">50 / 50 Payment Plan</p>
+                        <div className="flex justify-between">
+                          <span>Deposit today (50%)</span>
+                          <span className="font-bold text-foreground">{fmtKES(Math.round(total * 0.5))}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Balance on delivery (50%)</span>
+                          <span className="font-bold text-foreground">{fmtKES(Math.round(total * 0.5))}</span>
+                        </div>
+                        <p className="text-[10px] italic">The STK push will charge the deposit only. Our agent collects the balance at your door.</p>
+                      </div>
+                    )}
+
                     <p className="text-[10px] text-muted-foreground leading-relaxed">
                       {!profile
-                        ? "Guests can check out with Card or M-Pesa. Sign in to unlock member pay-after-delivery options."
+                        ? "Guests can check out with M-Pesa. Sign in to unlock member pay-after-delivery options."
                         : juniorPrepayOnly
                           ? "Junior members must prepay before delivery. COD unlocks at Bronze."
                           : !canPayOnDelivery
@@ -907,7 +929,7 @@ export default function Checkout() {
                     {paymentMethod === "Mpesa" && (
                       <div className="space-y-2 rounded border border-primary/20 bg-primary/5 p-4">
                         <label className="text-[10px] tracking-widest uppercase text-primary font-bold">
-                          M-Pesa Phone
+                          M-Pesa Phone (for deposit STK push)
                         </label>
                         <input
                           type="tel"
@@ -917,7 +939,7 @@ export default function Checkout() {
                           className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
                         />
                         <p className="text-[10px] text-muted-foreground">
-                          Sandbox mode is active for now. This simulates a successful payment while live M-Pesa credentials are pending.
+                          You will receive an STK push for the 50% deposit ({fmtKES(Math.round(total * 0.5))}). The remaining balance is collected on delivery.
                         </p>
                       </div>
                     )}
@@ -930,7 +952,11 @@ export default function Checkout() {
                     className="w-full py-4 bg-primary text-primary-foreground text-xs tracking-[0.2em] uppercase font-sans font-bold hover:bg-gold-light transition-all duration-300 luxury-shadow disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     <ShieldCheck className="w-4 h-4" />
-                    {submitting ? "Placing Order..." : `Place Order — ${fmtKES(total)}`}
+                    {submitting
+                      ? "Placing Order..."
+                      : paymentMethod === "Mpesa"
+                        ? `Pay Deposit ${fmtKES(Math.round(total * 0.5))} via M-Pesa`
+                        : `Place Order — ${fmtKES(total)}`}
                   </button>
 
                   <p className="text-[10px] text-muted-foreground text-center font-sans leading-relaxed">

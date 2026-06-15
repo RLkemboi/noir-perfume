@@ -9,6 +9,10 @@ export interface CartItem {
   quantity: number;
   /** Bottle format (e.g. "50ml"). Missing means Signature — the pre-tier default. */
   size?: string;
+  /** Which option the customer chose. Missing means "copy" (legacy default). */
+  variant?: "original" | "copy";
+  /** Display string: "Original" or "Our version of [Name]". */
+  variantLabel?: string;
 }
 
 interface CartContextType {
@@ -96,16 +100,21 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [items]);
 
   const addItem = async (item: Omit<CartItem, "quantity">) => {
+    // Default to the "copy" variant when none supplied (backward compatible).
+    const variant: "original" | "copy" = item.variant ?? "copy";
+    const normalized: Omit<CartItem, "quantity"> = { ...item, variant };
     setItems((prev) => {
-      const existing = prev.find((i) => i.productId === item.productId);
+      const existing = prev.find((i) => i.productId === normalized.productId);
       if (existing) {
-        // One line per product; the latest selected size/price wins
+        // One line per product; the latest selected size/price/variant wins
         // (mirrors the server cart merge).
         return prev.map((i) =>
-          i.productId === item.productId ? { ...i, ...item, quantity: i.quantity + 1 } : i
+          i.productId === normalized.productId
+            ? { ...i, ...normalized, quantity: i.quantity + 1 }
+            : i
         );
       }
-      return [...prev, { ...item, quantity: 1 }];
+      return [...prev, { ...normalized, quantity: 1 }];
     });
     setIsOpen(true);
 
@@ -113,7 +122,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await fetch(`/api/cart/${sessionId}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...item, quantity: 1 }),
+        body: JSON.stringify({ ...normalized, quantity: 1 }),
       });
     } catch {
       // Silently fail; local state is already updated

@@ -108,6 +108,7 @@ export interface UserProfile {
   accountBalance: number;
   tierManualOverride?: boolean;
   lastTierEvaluatedAt?: string;
+  swapCount?: number;
 }
 
 export interface CartItem {
@@ -119,6 +120,10 @@ export interface CartItem {
   quantity: number;
   /** Bottle format (e.g. "50ml"). Missing means Signature — the pre-tier default. */
   size?: string;
+  /** Which option the customer chose. Missing means "copy" (legacy default). */
+  variant?: "original" | "copy";
+  /** Display string: "Original" or "Our version of [Name]". */
+  variantLabel?: string;
 }
 
 export interface ShippingDetails {
@@ -224,6 +229,12 @@ export interface Order {
   mpesaMerchantRequestId?: string;
   mpesaCheckoutRequestId?: string;
   mpesaReceiptNumber?: string;
+  depositAmount?: number;          // 50% paid at checkout
+  balanceDue?: number;             // 50% due on delivery
+  balancePaidAt?: string;          // ISO timestamp when delivery payment confirmed
+  balanceMpesaCheckoutRequestId?: string;
+  balanceMpesaReceiptNumber?: string;
+  balanceMpesaMerchantRequestId?: string;
   paymentHistory?: PaymentHistoryEntry[];
   refundStatus?: RefundStatus;
   refundEntries?: RefundEntry[];

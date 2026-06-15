@@ -23,6 +23,19 @@ export interface Product {
     element: ElementType;
     occasion: OccasionType;
   };
+
+  // Pricing
+  originalRetailKes?: number;       // official retail price of genuine article
+  copyPrice?: number;               // our quality copy price (pre-computed, stored)
+
+  // Performance (in-house tested, labeled "Noir in-house test")
+  longevityHours?: { min: number; max: number };
+  sillageLabel?: "soft" | "moderate" | "strong" | "huge";
+  scentAccuracyPct?: number;        // how closely copy matches original, e.g. 88
+
+  // Deals
+  onDeal?: boolean;
+  dealPreviousPrice?: number;       // MUST be a real previously-charged price
 }
 
 export const products: Product[] = [
@@ -42,7 +55,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 3421,
     collection: "Limited",
-    tags: { drive: "passion", element: "floral", occasion: "intimate" }
+    tags: { drive: "passion", element: "floral", occasion: "intimate" },
+    originalRetailKes: 49000,
+    copyPrice: 7200,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "14",
@@ -60,7 +79,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 2890,
     collection: "Core",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 3500,
+    copyPrice: 2400,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "15",
@@ -78,7 +103,13 @@ export const products: Product[] = [
     rating: 4.9,
     reviews: 5120,
     collection: "Archive",
-    tags: { drive: "power", element: "fresh", occasion: "boardroom" }
+    tags: { drive: "power", element: "fresh", occasion: "boardroom" },
+    originalRetailKes: 58000,
+    copyPrice: 7600,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "huge",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "16",
@@ -96,7 +127,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 8904,
     collection: "Core",
-    tags: { drive: "passion", element: "fresh", occasion: "evening" }
+    tags: { drive: "passion", element: "fresh", occasion: "evening" },
+    originalRetailKes: 17500,
+    copyPrice: 4100,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "17",
@@ -114,7 +151,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 6782,
     collection: "Core",
-    tags: { drive: "precision", element: "fresh", occasion: "boardroom" }
+    tags: { drive: "precision", element: "fresh", occasion: "boardroom" },
+    originalRetailKes: 20000,
+    copyPrice: 4400,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "18",
@@ -132,7 +175,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 4531,
     collection: "Core",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 16500,
+    copyPrice: 4000,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "19",
@@ -150,7 +199,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 2104,
     collection: "Limited",
-    tags: { drive: "passion", element: "amber", occasion: "intimate" }
+    tags: { drive: "passion", element: "amber", occasion: "intimate" },
+    originalRetailKes: 21500,
+    copyPrice: 4600,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "20",
@@ -168,7 +223,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 1832,
     collection: "Limited",
-    tags: { drive: "mystery", element: "fresh", occasion: "signature" }
+    tags: { drive: "mystery", element: "fresh", occasion: "signature" },
+    originalRetailKes: 37500,
+    copyPrice: 6400,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "21",
@@ -186,7 +247,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 12480,
     collection: "Core",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 14500,
+    copyPrice: 3600,
+    longevityHours: { min: 4, max: 6 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "22",
@@ -204,7 +271,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 4830,
     collection: "Core",
-    tags: { drive: "power", element: "fresh", occasion: "boardroom" }
+    tags: { drive: "power", element: "fresh", occasion: "boardroom" },
+    originalRetailKes: 19000,
+    copyPrice: 4300,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "23",
@@ -222,7 +295,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 3210,
     collection: "Core",
-    tags: { drive: "mystery", element: "fresh", occasion: "evening" }
+    tags: { drive: "mystery", element: "fresh", occasion: "evening" },
+    originalRetailKes: 17000,
+    copyPrice: 4000,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "24",
@@ -240,7 +319,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 7640,
     collection: "Archive",
-    tags: { drive: "mystery", element: "fresh", occasion: "evening" }
+    tags: { drive: "mystery", element: "fresh", occasion: "evening" },
+    originalRetailKes: 21000,
+    copyPrice: 4500,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "25",
@@ -258,7 +343,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 5920,
     collection: "Core",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 16500,
+    copyPrice: 4000,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "26",
@@ -276,7 +367,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 2140,
     collection: "Core",
-    tags: { drive: "passion", element: "amber", occasion: "evening" }
+    tags: { drive: "passion", element: "amber", occasion: "evening" },
+    originalRetailKes: 17500,
+    copyPrice: 4100,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "27",
@@ -294,7 +391,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 1530,
     collection: "Core",
-    tags: { drive: "passion", element: "amber", occasion: "intimate" }
+    tags: { drive: "passion", element: "amber", occasion: "intimate" },
+    originalRetailKes: 15500,
+    copyPrice: 3700,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "28",
@@ -312,7 +415,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 860,
     collection: "Limited",
-    tags: { drive: "passion", element: "amber", occasion: "evening" }
+    tags: { drive: "passion", element: "amber", occasion: "evening" },
+    originalRetailKes: 17000,
+    copyPrice: 4000,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "29",
@@ -330,7 +439,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 9320,
     collection: "Core",
-    tags: { drive: "passion", element: "amber", occasion: "intimate" }
+    tags: { drive: "passion", element: "amber", occasion: "intimate" },
+    originalRetailKes: 15000,
+    copyPrice: 3700,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "30",
@@ -348,7 +463,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 3470,
     collection: "Core",
-    tags: { drive: "power", element: "amber", occasion: "evening" }
+    tags: { drive: "power", element: "amber", occasion: "evening" },
+    originalRetailKes: 16500,
+    copyPrice: 4000,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "31",
@@ -366,7 +487,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 740,
     collection: "Core",
-    tags: { drive: "passion", element: "floral", occasion: "signature" }
+    tags: { drive: "passion", element: "floral", occasion: "signature" },
+    originalRetailKes: 15500,
+    copyPrice: 3700,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "32",
@@ -384,7 +511,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 980,
     collection: "Limited",
-    tags: { drive: "precision", element: "amber", occasion: "boardroom" }
+    tags: { drive: "precision", element: "amber", occasion: "boardroom" },
+    originalRetailKes: 51000,
+    copyPrice: 7300,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "33",
@@ -402,7 +535,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 420,
     collection: "Archive",
-    tags: { drive: "mystery", element: "oud", occasion: "evening" }
+    tags: { drive: "mystery", element: "oud", occasion: "evening" },
+    originalRetailKes: 64000,
+    copyPrice: 7900,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "34",
@@ -420,7 +559,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 4310,
     collection: "Limited",
-    tags: { drive: "power", element: "amber", occasion: "evening" }
+    tags: { drive: "power", element: "amber", occasion: "evening" },
+    originalRetailKes: 47000,
+    copyPrice: 7000,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "huge",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "35",
@@ -438,7 +583,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 760,
     collection: "Archive",
-    tags: { drive: "precision", element: "floral", occasion: "boardroom" }
+    tags: { drive: "precision", element: "floral", occasion: "boardroom" },
+    originalRetailKes: 73000,
+    copyPrice: 8000,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "36",
@@ -456,7 +607,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 890,
     collection: "Archive",
-    tags: { drive: "mystery", element: "oud", occasion: "evening" }
+    tags: { drive: "mystery", element: "oud", occasion: "evening" },
+    originalRetailKes: 58500,
+    copyPrice: 7600,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "37",
@@ -474,7 +631,13 @@ export const products: Product[] = [
     rating: 4.9,
     reviews: 540,
     collection: "Archive",
-    tags: { drive: "mystery", element: "amber", occasion: "signature" }
+    tags: { drive: "mystery", element: "amber", occasion: "signature" },
+    originalRetailKes: 77000,
+    copyPrice: 8000,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "38",
@@ -492,7 +655,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 380,
     collection: "Archive",
-    tags: { drive: "passion", element: "amber", occasion: "intimate" }
+    tags: { drive: "passion", element: "amber", occasion: "intimate" },
+    originalRetailKes: 64000,
+    copyPrice: 7900,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "39",
@@ -510,7 +679,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 1240,
     collection: "Limited",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 44000,
+    copyPrice: 6800,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "40",
@@ -528,7 +703,13 @@ export const products: Product[] = [
     rating: 4.8,
     reviews: 1620,
     collection: "Limited",
-    tags: { drive: "mystery", element: "oud", occasion: "evening" }
+    tags: { drive: "mystery", element: "oud", occasion: "evening" },
+    originalRetailKes: 51000,
+    copyPrice: 7300,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "41",
@@ -546,7 +727,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 980,
     collection: "Limited",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 43000,
+    copyPrice: 6800,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "42",
@@ -564,7 +751,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 3850,
     collection: "Limited",
-    tags: { drive: "mystery", element: "floral", occasion: "signature" }
+    tags: { drive: "mystery", element: "floral", occasion: "signature" },
+    originalRetailKes: 42000,
+    copyPrice: 6700,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "43",
@@ -582,7 +775,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 1140,
     collection: "Limited",
-    tags: { drive: "passion", element: "oud", occasion: "evening" }
+    tags: { drive: "passion", element: "oud", occasion: "evening" },
+    originalRetailKes: 54500,
+    copyPrice: 7400,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "44",
@@ -600,7 +799,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 1680,
     collection: "Limited",
-    tags: { drive: "mystery", element: "amber", occasion: "intimate" }
+    tags: { drive: "mystery", element: "amber", occasion: "intimate" },
+    originalRetailKes: 51000,
+    copyPrice: 7300,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "45",
@@ -618,7 +823,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 11240,
     collection: "Core",
-    tags: { drive: "passion", element: "amber", occasion: "evening" }
+    tags: { drive: "passion", element: "amber", occasion: "evening" },
+    originalRetailKes: 7500,
+    copyPrice: 2800,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "huge",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "46",
@@ -636,7 +847,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 920,
     collection: "Limited",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 2500,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "47",
@@ -654,7 +871,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 2140,
     collection: "Core",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 3200,
+    copyPrice: 2300,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "48",
@@ -672,7 +895,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 3680,
     collection: "Core",
-    tags: { drive: "precision", element: "fresh", occasion: "boardroom" }
+    tags: { drive: "precision", element: "fresh", occasion: "boardroom" },
+    originalRetailKes: 4000,
+    copyPrice: 2400,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "49",
@@ -690,7 +919,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 1420,
     collection: "Core",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 2800,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "50",
@@ -708,7 +943,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 1080,
     collection: "Core",
-    tags: { drive: "power", element: "amber", occasion: "evening" }
+    tags: { drive: "power", element: "amber", occasion: "evening" },
+    originalRetailKes: 2500,
+    copyPrice: 2300,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "51",
@@ -726,7 +967,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 2860,
     collection: "Core",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 3500,
+    copyPrice: 2400,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "52",
@@ -744,7 +991,13 @@ export const products: Product[] = [
     rating: 4.4,
     reviews: 1960,
     collection: "Core",
-    tags: { drive: "passion", element: "fresh", occasion: "signature" }
+    tags: { drive: "passion", element: "fresh", occasion: "signature" },
+    originalRetailKes: 2800,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "53",
@@ -762,7 +1015,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 1540,
     collection: "Core",
-    tags: { drive: "power", element: "amber", occasion: "evening" }
+    tags: { drive: "power", element: "amber", occasion: "evening" },
+    originalRetailKes: 3000,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "54",
@@ -780,7 +1039,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 14620,
     collection: "Core",
-    tags: { drive: "passion", element: "floral", occasion: "intimate" }
+    tags: { drive: "passion", element: "floral", occasion: "intimate" },
+    originalRetailKes: 8000,
+    copyPrice: 2800,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "55",
@@ -798,7 +1063,13 @@ export const products: Product[] = [
     rating: 4.4,
     reviews: 4380,
     collection: "Core",
-    tags: { drive: "passion", element: "floral", occasion: "intimate" }
+    tags: { drive: "passion", element: "floral", occasion: "intimate" },
+    originalRetailKes: 4500,
+    copyPrice: 2400,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "56",
@@ -816,7 +1087,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 9840,
     collection: "Core",
-    tags: { drive: "power", element: "fresh", occasion: "signature" }
+    tags: { drive: "power", element: "fresh", occasion: "signature" },
+    originalRetailKes: 7000,
+    copyPrice: 2600,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "57",
@@ -834,7 +1111,13 @@ export const products: Product[] = [
     rating: 4.4,
     reviews: 3120,
     collection: "Core",
-    tags: { drive: "passion", element: "floral", occasion: "signature" }
+    tags: { drive: "passion", element: "floral", occasion: "signature" },
+    originalRetailKes: 3800,
+    copyPrice: 2400,
+    longevityHours: { min: 4, max: 6 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "58",
@@ -852,7 +1135,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 1860,
     collection: "Core",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 2800,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "59",
@@ -870,7 +1159,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 4270,
     collection: "Core",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 4500,
+    copyPrice: 2400,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "60",
@@ -888,7 +1183,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 1130,
     collection: "Core",
-    tags: { drive: "mystery", element: "fresh", occasion: "signature" }
+    tags: { drive: "mystery", element: "fresh", occasion: "signature" },
+    originalRetailKes: 2500,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "61",
@@ -906,7 +1207,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 890,
     collection: "Core",
-    tags: { drive: "passion", element: "floral", occasion: "intimate" }
+    tags: { drive: "passion", element: "floral", occasion: "intimate" },
+    originalRetailKes: 2200,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "62",
@@ -924,7 +1231,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 640,
     collection: "Limited",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 2000,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "63",
@@ -942,7 +1255,13 @@ export const products: Product[] = [
     rating: 4.4,
     reviews: 720,
     collection: "Core",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 2000,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "64",
@@ -960,7 +1279,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 2480,
     collection: "Core",
-    tags: { drive: "power", element: "fresh", occasion: "evening" }
+    tags: { drive: "power", element: "fresh", occasion: "evening" },
+    originalRetailKes: 3500,
+    copyPrice: 2400,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "65",
@@ -978,7 +1303,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 810,
     collection: "Core",
-    tags: { drive: "power", element: "floral", occasion: "evening" }
+    tags: { drive: "power", element: "floral", occasion: "evening" },
+    originalRetailKes: 2200,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "66",
@@ -996,7 +1327,13 @@ export const products: Product[] = [
     rating: 4.4,
     reviews: 1320,
     collection: "Core",
-    tags: { drive: "passion", element: "fresh", occasion: "signature" }
+    tags: { drive: "passion", element: "fresh", occasion: "signature" },
+    originalRetailKes: 2800,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "67",
@@ -1014,7 +1351,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 970,
     collection: "Core",
-    tags: { drive: "power", element: "fresh", occasion: "boardroom" }
+    tags: { drive: "power", element: "fresh", occasion: "boardroom" },
+    originalRetailKes: 2500,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "68",
@@ -1032,7 +1375,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 1480,
     collection: "Core",
-    tags: { drive: "passion", element: "fresh", occasion: "signature" }
+    tags: { drive: "passion", element: "fresh", occasion: "signature" },
+    originalRetailKes: 2800,
+    copyPrice: 2300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "69",
@@ -1050,7 +1399,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 760,
     collection: "Limited",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 2200,
+    copyPrice: 2300,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "70",
@@ -1068,7 +1423,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 1240,
     collection: "Limited",
-    tags: { drive: "power", element: "oud", occasion: "boardroom" }
+    tags: { drive: "power", element: "oud", occasion: "boardroom" },
+    originalRetailKes: 23500,
+    copyPrice: 4800,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "71",
@@ -1086,7 +1447,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 680,
     collection: "Limited",
-    tags: { drive: "passion", element: "amber", occasion: "evening" }
+    tags: { drive: "passion", element: "amber", occasion: "evening" },
+    originalRetailKes: 22000,
+    copyPrice: 4600,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "72",
@@ -1104,7 +1471,13 @@ export const products: Product[] = [
     rating: 4.3,
     reviews: 540,
     collection: "Core",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 1900,
+    copyPrice: 2200,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "73",
@@ -1122,7 +1495,13 @@ export const products: Product[] = [
     rating: 4.4,
     reviews: 620,
     collection: "Limited",
-    tags: { drive: "passion", element: "floral", occasion: "signature" }
+    tags: { drive: "passion", element: "floral", occasion: "signature" },
+    originalRetailKes: 49500,
+    copyPrice: 7200,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "74",
@@ -1140,7 +1519,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 2180,
     collection: "Limited",
-    tags: { drive: "passion", element: "floral", occasion: "intimate" }
+    tags: { drive: "passion", element: "floral", occasion: "intimate" },
+    originalRetailKes: 49500,
+    copyPrice: 7200,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "75",
@@ -1158,7 +1543,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 1340,
     collection: "Limited",
-    tags: { drive: "mystery", element: "amber", occasion: "intimate" }
+    tags: { drive: "mystery", element: "amber", occasion: "intimate" },
+    originalRetailKes: 45500,
+    copyPrice: 6900,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "76",
@@ -1176,7 +1567,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 1920,
     collection: "Limited",
-    tags: { drive: "precision", element: "floral", occasion: "signature" }
+    tags: { drive: "precision", element: "floral", occasion: "signature" },
+    originalRetailKes: 49500,
+    copyPrice: 7200,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "77",
@@ -1194,7 +1591,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 4860,
     collection: "Limited",
-    tags: { drive: "power", element: "oud", occasion: "boardroom" }
+    tags: { drive: "power", element: "oud", occasion: "boardroom" },
+    originalRetailKes: 51500,
+    copyPrice: 7300,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "huge",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "78",
@@ -1212,7 +1615,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 1760,
     collection: "Limited",
-    tags: { drive: "mystery", element: "fresh", occasion: "signature" }
+    tags: { drive: "mystery", element: "fresh", occasion: "signature" },
+    originalRetailKes: 49500,
+    copyPrice: 7200,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "79",
@@ -1230,7 +1639,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 2640,
     collection: "Limited",
-    tags: { drive: "passion", element: "amber", occasion: "evening" }
+    tags: { drive: "passion", element: "amber", occasion: "evening" },
+    originalRetailKes: 48000,
+    copyPrice: 7000,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "80",
@@ -1248,7 +1663,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 920,
     collection: "Archive",
-    tags: { drive: "precision", element: "floral", occasion: "signature" }
+    tags: { drive: "precision", element: "floral", occasion: "signature" },
+    originalRetailKes: 51500,
+    copyPrice: 7300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "81",
@@ -1266,7 +1687,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 1180,
     collection: "Archive",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 47000,
+    copyPrice: 7000,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "82",
@@ -1284,7 +1711,13 @@ export const products: Product[] = [
     rating: 4.4,
     reviews: 840,
     collection: "Limited",
-    tags: { drive: "passion", element: "fresh", occasion: "signature" }
+    tags: { drive: "passion", element: "fresh", occasion: "signature" },
+    originalRetailKes: 38500,
+    copyPrice: 6500,
+    longevityHours: { min: 4, max: 6 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "83",
@@ -1302,7 +1735,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 760,
     collection: "Limited",
-    tags: { drive: "power", element: "amber", occasion: "evening" }
+    tags: { drive: "power", element: "amber", occasion: "evening" },
+    originalRetailKes: 54000,
+    copyPrice: 7400,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "84",
@@ -1320,7 +1759,13 @@ export const products: Product[] = [
     rating: 4.4,
     reviews: 690,
     collection: "Limited",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 38500,
+    copyPrice: 6500,
+    longevityHours: { min: 4, max: 6 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "85",
@@ -1338,7 +1783,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 2940,
     collection: "Limited",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 38500,
+    copyPrice: 6500,
+    longevityHours: { min: 4, max: 6 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "86",
@@ -1356,7 +1807,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 6280,
     collection: "Core",
-    tags: { drive: "power", element: "amber", occasion: "evening" }
+    tags: { drive: "power", element: "amber", occasion: "evening" },
+    originalRetailKes: 21500,
+    copyPrice: 4600,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "87",
@@ -1374,7 +1831,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 2360,
     collection: "Limited",
-    tags: { drive: "passion", element: "floral", occasion: "intimate" }
+    tags: { drive: "passion", element: "floral", occasion: "intimate" },
+    originalRetailKes: 40500,
+    copyPrice: 6600,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "88",
@@ -1392,7 +1855,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 8740,
     collection: "Core",
-    tags: { drive: "power", element: "fresh", occasion: "boardroom" }
+    tags: { drive: "power", element: "fresh", occasion: "boardroom" },
+    originalRetailKes: 17000,
+    copyPrice: 4000,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "89",
@@ -1410,7 +1879,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 2870,
     collection: "Core",
-    tags: { drive: "power", element: "oud", occasion: "evening" }
+    tags: { drive: "power", element: "oud", occasion: "evening" },
+    originalRetailKes: 21500,
+    copyPrice: 4600,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "huge",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "90",
@@ -1428,7 +1903,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 1420,
     collection: "Limited",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 39000,
+    copyPrice: 6500,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "91",
@@ -1446,7 +1927,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 980,
     collection: "Limited",
-    tags: { drive: "mystery", element: "amber", occasion: "boardroom" }
+    tags: { drive: "mystery", element: "amber", occasion: "boardroom" },
+    originalRetailKes: 42000,
+    copyPrice: 6700,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "92",
@@ -1464,7 +1951,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 1310,
     collection: "Limited",
-    tags: { drive: "passion", element: "fresh", occasion: "evening" }
+    tags: { drive: "passion", element: "fresh", occasion: "evening" },
+    originalRetailKes: 51500,
+    copyPrice: 7300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "93",
@@ -1482,7 +1975,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 1980,
     collection: "Limited",
-    tags: { drive: "precision", element: "fresh", occasion: "boardroom" }
+    tags: { drive: "precision", element: "fresh", occasion: "boardroom" },
+    originalRetailKes: 51500,
+    copyPrice: 7300,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "94",
@@ -1500,7 +1999,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 460,
     collection: "Archive",
-    tags: { drive: "mystery", element: "amber", occasion: "evening" }
+    tags: { drive: "mystery", element: "amber", occasion: "evening" },
+    originalRetailKes: 54500,
+    copyPrice: 7400,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "95",
@@ -1518,7 +2023,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 11420,
     collection: "Core",
-    tags: { drive: "passion", element: "fresh", occasion: "evening" }
+    tags: { drive: "passion", element: "fresh", occasion: "evening" },
+    originalRetailKes: 14500,
+    copyPrice: 3600,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "96",
@@ -1536,7 +2047,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 7860,
     collection: "Core",
-    tags: { drive: "passion", element: "amber", occasion: "evening" }
+    tags: { drive: "passion", element: "amber", occasion: "evening" },
+    originalRetailKes: 15500,
+    copyPrice: 3700,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "97",
@@ -1554,7 +2071,13 @@ export const products: Product[] = [
     rating: 4.7,
     reviews: 3240,
     collection: "Core",
-    tags: { drive: "power", element: "amber", occasion: "evening" }
+    tags: { drive: "power", element: "amber", occasion: "evening" },
+    originalRetailKes: 17500,
+    copyPrice: 4100,
+    longevityHours: { min: 8, max: 12 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "98",
@@ -1572,7 +2095,13 @@ export const products: Product[] = [
     rating: 4.4,
     reviews: 1860,
     collection: "Core",
-    tags: { drive: "passion", element: "fresh", occasion: "signature" }
+    tags: { drive: "passion", element: "fresh", occasion: "signature" },
+    originalRetailKes: 16500,
+    copyPrice: 4000,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "99",
@@ -1590,7 +2119,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 6920,
     collection: "Core",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 12500,
+    copyPrice: 3400,
+    longevityHours: { min: 4, max: 6 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "100",
@@ -1608,7 +2143,13 @@ export const products: Product[] = [
     rating: 4.5,
     reviews: 1140,
     collection: "Core",
-    tags: { drive: "precision", element: "fresh", occasion: "signature" }
+    tags: { drive: "precision", element: "fresh", occasion: "signature" },
+    originalRetailKes: 15500,
+    copyPrice: 3700,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "moderate",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "101",
@@ -1626,7 +2167,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 8350,
     collection: "Core",
-    tags: { drive: "power", element: "fresh", occasion: "boardroom" }
+    tags: { drive: "power", element: "fresh", occasion: "boardroom" },
+    originalRetailKes: 14000,
+    copyPrice: 3600,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   },
   {
     id: "102",
@@ -1644,7 +2191,13 @@ export const products: Product[] = [
     rating: 4.6,
     reviews: 5740,
     collection: "Core",
-    tags: { drive: "passion", element: "amber", occasion: "evening" }
+    tags: { drive: "passion", element: "amber", occasion: "evening" },
+    originalRetailKes: 17000,
+    copyPrice: 4000,
+    longevityHours: { min: 6, max: 8 },
+    sillageLabel: "strong",
+    scentAccuracyPct: 88,
+    onDeal: false
   }
 ];
 

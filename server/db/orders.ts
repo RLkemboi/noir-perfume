@@ -662,6 +662,10 @@ export async function updateOrderPaymentMeta(
       | "mpesaCheckoutRequestId"
       | "mpesaReceiptNumber"
       | "paymentStatus"
+      | "balanceMpesaCheckoutRequestId"
+      | "balanceMpesaMerchantRequestId"
+      | "balanceMpesaReceiptNumber"
+      | "balancePaidAt"
     >
   >
 ): Promise<Order | null> {

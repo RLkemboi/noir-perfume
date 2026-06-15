@@ -266,7 +266,7 @@ export async function approveStaff(userId: string): Promise<UserProfile | null> 
 
 export async function updateStaffProfile(
   userId: string,
-  updates: Partial<Pick<UserProfile, "role" | "isApproved" | "employmentStatus" | "department" | "hrNotes">>
+  updates: Partial<Pick<UserProfile, "role" | "isApproved" | "employmentStatus" | "department" | "hrNotes" | "swapCount">>
 ): Promise<UserProfile | null> {
   const now = new Date().toISOString();
 

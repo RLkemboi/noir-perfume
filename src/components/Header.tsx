@@ -9,6 +9,7 @@ import { TierBadge } from "./ui/TierBadge";
 
 const NAV_LINKS = [
   { label: "The Collection", to: "/collection" },
+  { label: "Deals", to: "/deals" },
   { label: "Scent Finder", href: "/#scent-finder" },
   { label: "Editor's Picks", href: "/#products" },
   { label: "Our Story", href: "#story" },

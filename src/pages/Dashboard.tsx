@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LogOut, Package, User, ShoppingBag, Clock, Sparkles, Settings, ShieldCheck, ChevronRight, MessageSquare, Send, Store, CheckCircle2, MapPin, Star } from "lucide-react";
+import { LogOut, Package, User, ShoppingBag, Clock, Sparkles, Settings, ShieldCheck, ChevronRight, MessageSquare, Send, Store, CheckCircle2, MapPin, Star, RefreshCw, AlertTriangle, X } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { useCart } from "@/context/CartContext";
 import { toast } from "sonner";
@@ -27,6 +27,10 @@ export default function Dashboard() {
   const [mpesaPhone, setMpesaPhone] = useState<Record<number, string>>({});
   const [depositAmount, setDepositAmount] = useState("");
   const [depositing, setDepositing] = useState(false);
+  const [swapModalOpen, setSwapModalOpen] = useState(false);
+  const [swapFragrance, setSwapFragrance] = useState("");
+  const [swapNote, setSwapNote] = useState("");
+  const [submittingSwap, setSubmittingSwap] = useState(false);
   const tierPolicy = profile ? getTierPolicy(profile.tier) : null;
   const canUseLedgerAccount = !!tierPolicy?.canUseLedger;
   const canDepositToLedger = canUseLedgerAccount && (tierPolicy?.rank ?? 0) >= getTierPolicy("Gold").rank;
@@ -307,6 +311,36 @@ export default function Dashboard() {
     }
   };
 
+  const handleSwapRequest = async () => {
+    if (!swapFragrance.trim()) {
+      toast.error("Please specify the fragrance you want to swap to.");
+      return;
+    }
+    setSubmittingSwap(true);
+    try {
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (user) {
+        const token = await getIdToken();
+        if (token) headers.Authorization = `Bearer ${token}`;
+      }
+      const res = await fetch("/api/swaps/request", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ targetFragrance: swapFragrance.trim(), note: swapNote.trim() }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Swap request failed");
+      toast.success("Swap request submitted! Our team will be in touch.");
+      setSwapModalOpen(false);
+      setSwapFragrance("");
+      setSwapNote("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Swap request failed");
+    } finally {
+      setSubmittingSwap(false);
+    }
+  };
+
   const handleReorder = async (order: Order) => {
     try {
       for (const item of order.items) {
@@ -496,6 +530,68 @@ export default function Dashboard() {
                     }.`
                   : "Junior and Bronze accounts cannot preload funds or use wallet-style credit."}
               </p>
+            </div>
+          )}
+
+          {/* Outstanding balance notice (M-Pesa 50/50 orders) */}
+          {orders.some((o) => (o.balanceDue ?? 0) > 0 && o.status !== "Cancelled" && o.status !== "Delivered") && (
+            <div className="glass-panel p-6 mb-8 border-amber-500/30 bg-amber-500/5 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                <div>
+                  <h3 className="font-serif text-base font-bold text-amber-500">Outstanding Delivery Balance</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    You have orders with a balance due on delivery. Our agent will collect it when your package arrives via M-Pesa.
+                  </p>
+                  <ul className="mt-3 space-y-1">
+                    {orders
+                      .filter((o) => (o.balanceDue ?? 0) > 0 && o.status !== "Cancelled" && o.status !== "Delivered")
+                      .map((o) => (
+                        <li key={o.orderId} className="text-xs flex justify-between gap-4">
+                          <span className="text-muted-foreground">Order #{o.orderId}</span>
+                          <span className="font-bold text-amber-500">KES {Math.round(o.balanceDue ?? 0).toLocaleString()} on delivery</span>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Fragrance Swap Policy */}
+          {user && (
+            <div className="glass-panel p-6 mb-8 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <RefreshCw className="w-5 h-5 text-primary shrink-0 mt-0.5" />
+                  <div>
+                    <h2 className="font-serif text-xl font-bold">Fragrance Swap</h2>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Changed your mind? Swap to a different fragrance — first swap is <span className="font-bold text-primary">free</span>, subsequent swaps are <span className="font-bold">KES 200</span> each.
+                    </p>
+                    <ul className="mt-2 space-y-1 text-xs text-muted-foreground list-disc list-inside">
+                      <li>Only eligible for delivered orders within 7 days of arrival.</li>
+                      <li>Fragrance must be unused and in original packaging.</li>
+                      <li>Your first swap is complimentary; subsequent swaps cost KES 200.</li>
+                      <li>Our team will contact you to arrange collection.</li>
+                    </ul>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSwapModalOpen(true)}
+                  className="px-5 py-3 border border-primary text-primary text-[10px] tracking-widest uppercase font-bold hover:bg-primary/10 transition-colors shrink-0 flex items-center gap-2"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" /> Request a Swap
+                </button>
+              </div>
+              {(profile?.swapCount ?? 0) > 0 && (
+                <p className="text-[10px] text-muted-foreground border-t border-border/40 pt-3">
+                  You have used {profile!.swapCount} swap{profile!.swapCount! > 1 ? "s" : ""}.
+                  {profile!.swapCount! >= 1
+                    ? ` Further swaps will incur a KES 200 fee.`
+                    : ` Your first swap is still free.`}
+                </p>
+              )}
             </div>
           )}
 
@@ -869,6 +965,59 @@ export default function Dashboard() {
           </div>
         </motion.div>
       </div>
+
+      {/* Swap Request Modal */}
+      {swapModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm" onClick={() => setSwapModalOpen(false)}>
+          <div className="glass-panel p-8 max-w-md w-full space-y-6 relative" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={() => setSwapModalOpen(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            <div>
+              <h3 className="font-serif text-xl font-bold mb-1">Request a Fragrance Swap</h3>
+              <p className="text-muted-foreground text-xs font-sans">
+                {(profile?.swapCount ?? 0) === 0
+                  ? "Your first swap is free. Tell us which fragrance you would like instead."
+                  : `You have used ${profile?.swapCount} swap(s). This swap will cost KES 200.`}
+              </p>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Target Fragrance</label>
+                <input
+                  type="text"
+                  value={swapFragrance}
+                  onChange={(e) => setSwapFragrance(e.target.value)}
+                  placeholder="e.g. Creed Aventus — Our version"
+                  className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Note (optional)</label>
+                <textarea
+                  value={swapNote}
+                  onChange={(e) => setSwapNote(e.target.value)}
+                  placeholder="Any additional context about your swap request…"
+                  rows={3}
+                  className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors resize-none"
+                />
+              </div>
+            </div>
+            <button
+              onClick={() => void handleSwapRequest()}
+              disabled={submittingSwap || !swapFragrance.trim()}
+              className="w-full py-3 bg-primary text-primary-foreground text-xs tracking-[0.2em] uppercase font-bold hover:bg-gold-light transition-colors disabled:opacity-40 disabled:cursor-not-allowed luxury-shadow flex items-center justify-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              {submittingSwap ? "Submitting…" : "Submit Swap Request"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
