@@ -12,7 +12,7 @@ const NotFound = () => {
         className="text-center space-y-6"
       >
         <Link to="/" className="mb-2 inline-block" aria-label="NOIR home">
-          <img src="/assets/noir-logo-1.svg" alt="NOIR" className="h-16 w-auto mx-auto" />
+          <img src="/assets/noir-logo-1.svg" alt="NOIR" className="h-64 w-auto mx-auto" />
         </Link>
         <h1 className="font-serif text-6xl font-bold gold-text">404</h1>
         <p className="text-muted-foreground font-serif italic text-lg">
