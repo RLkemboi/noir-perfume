@@ -959,12 +959,16 @@ app.post("/api/checkout", async (c) => {
   });
 
   if (paymentMethod === "Mpesa" && normalizedPaymentPhone) {
+    // 50/50 split: STK push charges the deposit only (50%); balance due on delivery.
+    const depositAmount = Math.round(order.total * 0.5);
+    const balanceDue = order.total - depositAmount;
+
     try {
       const stk = await initiateMpesaStkPush({
-        amount: order.total,
+        amount: depositAmount,
         phoneNumber: normalizedPaymentPhone,
-        accountReference: `ORDER-${order.orderId}`,
-        transactionDesc: `Noir Perfume order ${order.orderId}`,
+        accountReference: `ORDER-${order.orderId}-DEP`,
+        transactionDesc: `Noir deposit for order ${order.orderId}`,
       });
 
       await updateOrderPaymentMeta(order.orderId, {
@@ -975,9 +979,23 @@ app.post("/api/checkout", async (c) => {
         mpesaCheckoutRequestId: stk.checkoutRequestId,
       });
 
-      let settledOrder = order;
-      if (stk.mock && order.amountDue > 0) {
-        settledOrder = (await settleMockMpesaPayment(order, normalizedPaymentPhone, stk.receiptNumber || `MOCK-${order.orderId}`)) || order;
+      // Persist deposit / balance split on the order
+      await patchOrder(order.orderId, { depositAmount, balanceDue });
+
+      let settledOrder = (await getOrderById(order.orderId)) || order;
+      if (stk.mock && depositAmount > 0) {
+        // In sandbox: auto-settle the deposit amount only (not the full total)
+        const depositSettled = await recordOrderPayment(order.orderId, depositAmount, "mpesa_stk");
+        if (depositSettled) {
+          await updateOrderPaymentMeta(order.orderId, {
+            paymentPhone: normalizedPaymentPhone,
+            paymentReference: stk.receiptNumber || `MOCK-DEP-${order.orderId}`,
+            mpesaReceiptNumber: stk.receiptNumber || `MOCK-DEP-${order.orderId}`,
+            paymentLastError: undefined,
+          });
+          // Loyalty not awarded yet — full payment happens on delivery
+          settledOrder = (await getOrderById(order.orderId)) || depositSettled;
+        }
       }
       await deleteCart(sessionId);
 
@@ -985,6 +1003,8 @@ app.post("/api/checkout", async (c) => {
         success: true,
         orderId: order.orderId,
         total: order.total,
+        depositAmount,
+        balanceDue,
         order: settledOrder,
         mpesa: {
           checkoutRequestId: stk.checkoutRequestId,
@@ -1025,6 +1045,65 @@ app.post("/api/checkout", async (c) => {
   const finalizedOrder = await awardLoyaltyIfEligible((await getOrderById(order.orderId)) || order);
   return c.json({ success: true, orderId: order.orderId, total: order.total, order: finalizedOrder });
   });
+
+// ── Fragrance Swap Requests ───────────────────────────────────────────────────
+
+app.post("/api/swaps/request", async (c) => {
+  let body: { targetFragrance: string; note?: string };
+  try {
+    body = await c.req.json();
+  } catch {
+    throw new HTTPException(400, { message: "Invalid request body" });
+  }
+  const { targetFragrance, note } = body;
+  if (!targetFragrance?.trim()) {
+    throw new HTTPException(400, { message: "targetFragrance is required" });
+  }
+
+  // Optionally resolve authenticated user
+  const authHeader = c.req.header("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+  let userId: string | undefined;
+  let userEmail: string | undefined;
+
+  if (token && auth) {
+    try {
+      const decoded = await auth.verifyIdToken(token);
+      userId = decoded.uid;
+      userEmail = decoded.email || undefined;
+    } catch {
+      // soft — guests can still request swaps
+    }
+  }
+
+  const swapId = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
+
+  // Log swap request to system logs for admin visibility
+  addSystemLog("info", "Swaps", `Swap request ${swapId}: ${userId ?? "guest"} → ${targetFragrance}${note ? ` (${note})` : ""}`);
+
+  // Persist swap count on user profile (first swap free, subsequent +200)
+  let swapFee = 0;
+  if (userId) {
+    const profile = await getUserProfile(userId, userEmail);
+    const currentSwapCount = profile.swapCount ?? 0;
+    swapFee = currentSwapCount >= 1 ? 200 : 0;
+
+    // Increment swap count on user profile via updateStaffProfile (patch)
+    await updateStaffProfile(userId, { swapCount: currentSwapCount + 1 });
+  }
+
+  return c.json({
+    success: true,
+    swapId,
+    createdAt,
+    targetFragrance,
+    swapFee,
+    message: swapFee === 0
+      ? "Your free swap request has been received. Our team will contact you within 24 hours."
+      : `Your swap request (KES ${swapFee} fee) has been received. Our team will contact you within 24 hours.`,
+  });
+});
 
 app.get("/api/user/profile", async (c) => {
   const authHeader = c.req.header("Authorization") || "";
@@ -1494,6 +1573,97 @@ app.post("/api/orders/:orderId/customer-cancel", handleCustomerOrderCancellation
     } catch (err) {
       if (err instanceof HTTPException) throw err;
       throw new HTTPException(401, { message: "Invalid token" });
+    }
+  });
+
+  // Staff: Request M-Pesa delivery-balance payment (sends STK for remaining balanceDue)
+  app.post("/api/staff/orders/:orderId/request-delivery-payment", async (c) => {
+    const orderId = Number(c.req.param("orderId"));
+    const authHeader = c.req.header("Authorization") || "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : "";
+    if (!token || !auth) throw new HTTPException(401, { message: "Unauthorized" });
+
+    let decoded: Awaited<ReturnType<typeof auth.verifyIdToken>>;
+    try {
+      decoded = await auth.verifyIdToken(token);
+    } catch {
+      throw new HTTPException(401, { message: "Invalid token" });
+    }
+
+    const profile = await getUserProfile(decoded.uid, decoded.email);
+    if (profile.role !== "DeliveryAgent") {
+      throw new HTTPException(403, { message: "Delivery agents only" });
+    }
+
+    const order = await getOrderById(orderId);
+    if (!order) throw new HTTPException(404, { message: "Order not found" });
+    if (order.assignedAgentId !== decoded.uid) {
+      throw new HTTPException(403, { message: "You are not the assigned agent for this order" });
+    }
+    if (order.status !== "Out for Delivery") {
+      throw new HTTPException(400, { message: "Order must be Out for Delivery" });
+    }
+
+    const balanceDue = order.balanceDue ?? order.amountDue;
+    if (!balanceDue || balanceDue <= 0) {
+      throw new HTTPException(400, { message: "No outstanding balance to collect" });
+    }
+
+    const phone = order.paymentPhone;
+    if (!phone) throw new HTTPException(400, { message: "No payment phone on file for this order" });
+
+    let normalizedPhone: string;
+    try {
+      normalizedPhone = normalizeMpesaPhone(phone);
+    } catch (err) {
+      throw new HTTPException(400, { message: err instanceof Error ? err.message : "Invalid phone" });
+    }
+
+    try {
+      const stk = await initiateMpesaStkPush({
+        amount: Math.round(balanceDue),
+        phoneNumber: normalizedPhone,
+        accountReference: `ORDER-${orderId}-BAL`,
+        transactionDesc: `Noir delivery balance for order ${orderId}`,
+      });
+
+      await updateOrderPaymentMeta(order.orderId, {
+        balanceMpesaMerchantRequestId: stk.merchantRequestId,
+        balanceMpesaCheckoutRequestId: stk.checkoutRequestId,
+      });
+
+      let updatedOrder = (await getOrderById(orderId)) || order;
+
+      if (stk.mock && balanceDue > 0) {
+        // Sandbox: auto-settle the balance payment
+        const balanceSettled = await recordOrderPayment(orderId, Math.round(balanceDue), "mpesa_stk");
+        if (balanceSettled) {
+          await updateOrderPaymentMeta(orderId, {
+            balanceMpesaReceiptNumber: stk.receiptNumber || `MOCK-BAL-${orderId}`,
+            balancePaidAt: new Date().toISOString(),
+          });
+          await patchOrder(orderId, { balanceDue: 0, balancePaidAt: new Date().toISOString() });
+          // Award loyalty once fully paid
+          await awardLoyaltyIfEligible(balanceSettled);
+          updatedOrder = (await getOrderById(orderId)) || balanceSettled;
+        }
+      }
+
+      await appendOrderAudit(orderId, {
+        type: "payment_prompt_requested",
+        message: `Delivery agent requested balance payment STK (${stk.mock ? "sandbox" : "live"}).`,
+        actorId: decoded.uid,
+        actorEmail: decoded.email,
+      });
+
+      return c.json({
+        success: true,
+        order: updatedOrder,
+        mpesa: { checkoutRequestId: stk.checkoutRequestId, customerMessage: stk.customerMessage, mock: stk.mock },
+      });
+    } catch (err) {
+      if (err instanceof HTTPException) throw err;
+      throw new HTTPException(502, { message: err instanceof Error ? err.message : "STK push failed" });
     }
   });
 

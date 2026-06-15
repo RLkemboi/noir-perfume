@@ -21,6 +21,7 @@ export default function AgentDashboard() {
   const navigate = useNavigate();
   const [availableOrders, setAvailableOrders] = useState<Order[]>([]);
   const [myOrders, setMyOrders] = useState<Order[]>([]);
+  const [requestingBalanceId, setRequestingBalanceId] = useState<number | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
@@ -87,6 +88,32 @@ export default function AgentDashboard() {
       }
     } catch {
       toast.error("An error occurred");
+    }
+  };
+
+  const handleRequestDeliveryPayment = async (orderId: number) => {
+    setRequestingBalanceId(orderId);
+    try {
+      const token = await getIdToken();
+      const res = await fetch(`/api/staff/orders/${orderId}/request-delivery-payment`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success(
+          data.mpesa?.mock
+            ? data.mpesa?.customerMessage || "Balance payment processed (sandbox)."
+            : data.mpesa?.customerMessage || "Balance STK push sent to customer."
+        );
+        void fetchData();
+      } else {
+        toast.error(data.message || "Failed to request delivery payment");
+      }
+    } catch {
+      toast.error("An error occurred");
+    } finally {
+      setRequestingBalanceId(null);
     }
   };
 
@@ -227,15 +254,30 @@ export default function AgentDashboard() {
                     </div>
                   </div>
                   
-                  <div className="flex gap-3 pt-4 border-t border-border/40">
+                  <div className="flex gap-3 pt-4 border-t border-border/40 flex-wrap">
                     {order.status === "Out for Delivery" ? (
-                      <button 
-                        onClick={() => handleConfirmDelivery(order.orderId)}
-                        className="flex-1 py-3 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light transition-colors flex items-center justify-center gap-2"
-                      >
-                        <CheckCircle className="w-4 h-4" />
-                        Confirm Delivery
-                      </button>
+                      <>
+                        {/* Request balance payment if there's an outstanding balance */}
+                        {(order.balanceDue ?? 0) > 0 && (
+                          <button
+                            onClick={() => handleRequestDeliveryPayment(order.orderId)}
+                            disabled={requestingBalanceId === order.orderId}
+                            className="flex-1 py-3 border border-primary text-primary text-[10px] tracking-widest uppercase font-bold hover:bg-primary/10 transition-colors flex items-center justify-center gap-2 disabled:opacity-50 min-w-[140px]"
+                          >
+                            <Phone className="w-4 h-4" />
+                            {requestingBalanceId === order.orderId
+                              ? "Sending..."
+                              : `Collect KES ${Math.round(order.balanceDue ?? 0).toLocaleString()} via M-Pesa`}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleConfirmDelivery(order.orderId)}
+                          className="flex-1 py-3 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light transition-colors flex items-center justify-center gap-2 min-w-[140px]"
+                        >
+                          <CheckCircle className="w-4 h-4" />
+                          Confirm Delivery
+                        </button>
+                      </>
                     ) : (
                       <div className="flex-1 py-3 border border-border text-muted-foreground text-[10px] tracking-widest uppercase font-bold flex items-center justify-center gap-2">
                         {order.customerDeliveryConfirmed ? "Customer Confirmed" : "Awaiting Customer Confirmation"}

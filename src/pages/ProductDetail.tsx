@@ -319,14 +319,18 @@ export default function ProductDetail() {
 
   const handleAdd = () => {
     if (!product) return;
+    const variantLabel =
+      variant === "original" ? "Original" : `Our version of ${product.name}`;
     for (let i = 0; i < quantity; i++) {
       addItem({
         productId: product.id,
         name: product.name,
         brand: product.brand,
-        price: formatMoney(tierPrice(parsePrice(product.price), tier)),
+        price: formatMoney(unitPrice),
         image: product.image,
         size: tier.size,
+        variant,
+        variantLabel,
       });
     }
     toast.success(`${product.name} (${tier.label} ${tier.size} × ${quantity}) added to bag`, {
@@ -373,8 +377,18 @@ export default function ProductDetail() {
   ).slice(0, 4);
 
   const basePrice = parsePrice(product.price);
-  const unitPrice = tierPrice(basePrice, tier);
-  const originalPrice = Math.round(basePrice * 5.5);
+  // Copy price = pre-computed stored value (falls back to legacy price for remote products).
+  const copyPrice = product.copyPrice ?? basePrice;
+  // Original retail = genuine article price (falls back to a sensible estimate if missing).
+  const originalRetailKes = product.originalRetailKes ?? Math.round(basePrice * 5.5);
+  const scentAccuracyPct = product.scentAccuracyPct ?? 88;
+  const lh = product.longevityHours;
+  const sLabel = product.sillageLabel;
+  // The base price for the selected variant, before size-tier multiplier.
+  const variantBase = variant === "original" ? originalRetailKes : copyPrice;
+  const unitPrice = tierPrice(variantBase, tier);
+  const savings = Math.max(0, originalRetailKes - copyPrice);
+  const sillageDisplay = sLabel ? sLabel.charAt(0).toUpperCase() + sLabel.slice(1) : "";
 
   const seasonTags = getSeasonTags(product);
   const occasionTags = getOccasionTags(product);
@@ -470,44 +484,88 @@ export default function ProductDetail() {
                 "{product.description}"
               </p>
 
-              {/* Meters */}
-              <div className="space-y-4 max-w-sm">
-                <Meter label="Longevity" value={product.longevity} icon={<Clock className="w-3.5 h-3.5" />} />
-                <Meter label="Sillage"   value={product.sillage}   icon={<Volume2 className="w-3.5 h-3.5" />} />
-              </div>
-
-              {/* Variant toggle */}
+              {/* ── Buy-box: variant selector (two cards) ───────────────────── */}
               <div className="space-y-2">
-                <p className="text-primary text-[10px] tracking-[0.25em] uppercase font-sans font-semibold">Variant</p>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setVariant("copy")}
-                    aria-pressed={variant === "copy"}
-                    className={`px-4 py-2 text-xs tracking-[0.15em] uppercase font-sans font-bold border transition-colors ${
-                      variant === "copy"
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border text-muted-foreground hover:border-primary/40"
-                    }`}
-                  >
-                    Quality Copy
-                  </button>
+                <p className="text-primary text-[10px] tracking-[0.25em] uppercase font-sans font-semibold">Choose Your Option</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Original card */}
                   <button
                     onClick={() => setVariant("original")}
                     aria-pressed={variant === "original"}
-                    className={`px-4 py-2 text-xs tracking-[0.15em] uppercase font-sans font-bold border transition-colors ${
+                    className={`relative p-4 text-left border transition-colors ${
                       variant === "original"
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border text-muted-foreground hover:border-primary/40"
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:border-primary/40"
                     }`}
                   >
-                    Original
+                    <p className="text-[10px] tracking-[0.2em] uppercase font-sans font-semibold text-muted-foreground">Original</p>
+                    <p className="font-serif text-base font-bold leading-tight mt-1">
+                      {product.brand} {product.name}
+                    </p>
+                    <p className="font-serif gold-text font-bold mt-1">{formatMoney(originalRetailKes)}</p>
+                    <p className="text-muted-foreground text-[11px] font-sans mt-2 flex items-center gap-1.5">
+                      <Clock className="w-3 h-3" /> Ships in 1–2 weeks
+                    </p>
+                    <p className="text-muted-foreground/70 text-[10px] font-sans italic mt-0.5">
+                      Sourced from verified dealers
+                    </p>
+                  </button>
+
+                  {/* Quality Copy card */}
+                  <button
+                    onClick={() => setVariant("copy")}
+                    aria-pressed={variant === "copy"}
+                    className={`relative p-4 text-left border transition-colors ${
+                      variant === "copy"
+                        ? "border-primary bg-primary/10"
+                        : "border-border hover:border-primary/40"
+                    }`}
+                  >
+                    <p className="text-[10px] tracking-[0.2em] uppercase font-sans font-semibold text-muted-foreground">Quality Copy</p>
+                    <p className="font-serif text-base font-bold leading-tight mt-1">
+                      Our version of {product.name}
+                    </p>
+                    <p className="font-serif gold-text font-bold mt-1">{formatMoney(copyPrice)}</p>
+                    <p className="text-muted-foreground text-[11px] font-sans mt-2 flex items-center gap-1.5">
+                      <Clock className="w-3 h-3" /> Ships in 2–3 days
+                    </p>
+                    {savings > 0 && (
+                      <p className="text-primary text-[11px] font-sans font-semibold mt-1">
+                        Save KES {savings.toLocaleString()} vs original
+                      </p>
+                    )}
+                    <p className="text-muted-foreground/70 text-[10px] font-sans mt-0.5">
+                      ~{scentAccuracyPct}% scent match
+                    </p>
                   </button>
                 </div>
-                {variant === "original" && (
-                  <p className="text-muted-foreground text-xs font-sans italic">
-                    Est. Retail {formatMoney(originalPrice)} — sourced direct from the house
-                  </p>
-                )}
+              </div>
+
+              {/* ── Performance Stats (Noir in-house test) ──────────────────── */}
+              <div className="space-y-3 glass-panel p-5">
+                <p className="text-primary text-[10px] tracking-[0.25em] uppercase font-sans font-semibold">Performance</p>
+                <div className="space-y-3">
+                  <Meter
+                    label={`Longevity${lh ? `  ${lh.min}–${lh.max} hrs` : ""}`}
+                    value={product.longevity}
+                    icon={<Clock className="w-3.5 h-3.5" />}
+                  />
+                  <Meter
+                    label={`Sillage${sillageDisplay ? `  ${sillageDisplay}` : ""}`}
+                    value={product.sillage}
+                    icon={<Volume2 className="w-3.5 h-3.5" />}
+                  />
+                  {variant === "copy" && (
+                    <Meter
+                      label={`Scent match  ~${scentAccuracyPct}%`}
+                      value={scentAccuracyPct}
+                      icon={<Gem className="w-3.5 h-3.5" />}
+                    />
+                  )}
+                </div>
+                <p className="text-muted-foreground/60 text-[10px] font-sans italic">
+                  Noir in-house test — independent measurements.
+                </p>
               </div>
 
               {/* Size selector */}
@@ -515,7 +573,7 @@ export default function ProductDetail() {
                 <p className="text-primary text-[10px] tracking-[0.25em] uppercase font-sans font-semibold">Choose Your Format</p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {SIZE_TIERS.map((option) => {
-                    const price = tierPrice(parsePrice(product.price), option);
+                    const price = tierPrice(variantBase, option);
                     const active = tier.key === option.key;
                     return (
                       <button

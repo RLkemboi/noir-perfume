@@ -6,7 +6,8 @@ import { useCart } from "@/context/CartContext";
 import { useWishlist } from "@/hooks/useWishlist";
 import { FeaturedBadge } from "@/components/ui/FeaturedBadge";
 import { SCENT_OF_THE_WEEK_ID, scarcityLabel } from "@/config/storefront";
-import { perDayLine } from "@/utils/pricing";
+import { perDayLine, formatMoney } from "@/utils/pricing";
+import { parsePrice } from "@/utils/productRanking";
 import type { StorefrontProduct as Product } from "@/utils/storefrontProductAdapter";
 
 const Meter = ({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) => (
@@ -38,12 +39,15 @@ export const ProductCard = ({ product, index }: { product: Product; index: numbe
   const handleAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    const copyPrice = product.copyPrice ?? parsePrice(product.price);
     addItem({
       productId: product.id,
       name: product.name,
       brand: product.brand,
-      price: product.price,
+      price: formatMoney(copyPrice),
       image: product.image,
+      variant: "copy",
+      variantLabel: `Our version of ${product.name}`,
     });
     toast.success(`${product.name} added to bag`, {
       icon: <ShieldCheck className="w-4 h-4 text-primary" />,
@@ -125,8 +129,15 @@ export const ProductCard = ({ product, index }: { product: Product; index: numbe
             <p className="text-muted-foreground text-xs font-sans tracking-wider uppercase">{product.subtitle}</p>
           </div>
           <div className="text-right">
-            <span className="font-serif text-xl gold-text font-bold whitespace-nowrap">{product.price}</span>
-            <p className="text-muted-foreground text-[9px] font-sans mt-0.5 max-w-[110px]">{perDayLine(product.price)}</p>
+            <span className="font-serif text-xl gold-text font-bold whitespace-nowrap">
+              from {formatMoney(product.copyPrice ?? parsePrice(product.price))}
+            </span>
+            {product.originalRetailKes && product.originalRetailKes > (product.copyPrice ?? parsePrice(product.price)) && (
+              <p className="text-muted-foreground text-[9px] font-sans mt-0.5 line-through">
+                orig. {formatMoney(product.originalRetailKes)}
+              </p>
+            )}
+            <p className="text-muted-foreground text-[9px] font-sans mt-0.5 max-w-[110px]">{perDayLine(product.copyPrice ?? parsePrice(product.price))}</p>
           </div>
         </div>
 

@@ -3,7 +3,8 @@ import { Link } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Search, X, SlidersHorizontal } from "lucide-react";
 import { useStorefrontProducts } from "@/hooks/useStorefrontProducts";
-import { rankProducts } from "@/utils/productRanking";
+import { rankProducts, parsePrice } from "@/utils/productRanking";
+import { formatMoney } from "@/utils/pricing";
 
 interface SearchOverlayProps {
   open: boolean;
@@ -144,7 +145,7 @@ const SearchOverlay = ({ open, onClose }: SearchOverlayProps) => {
                         </p>
                       </div>
                       <span className="font-serif text-sm gold-text font-bold shrink-0">
-                        {product.price}
+                        from {formatMoney(product.copyPrice ?? parsePrice(product.price))}
                       </span>
                     </Link>
                   ))

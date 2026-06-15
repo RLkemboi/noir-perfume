@@ -27,6 +27,7 @@ const AdminDashboard = lazy(() => import("./pages/AdminDashboard.tsx"));
 const ProductManagement = lazy(() =>
   import("./pages/admin/ProductManagement.tsx").then((m) => ({ default: m.ProductManagement }))
 );
+const Deals = lazy(() => import("./pages/Deals.tsx"));
 const NotFound = lazy(() => import("./pages/NotFound.tsx"));
 
 const queryClient = new QueryClient();
@@ -207,6 +208,7 @@ const App = () => (
               <Route path="/staff/signup" element={<StaffSignup />} />
               <Route path="/admin" element={<AuthRoute allowedRoles={["Admin"]}><AdminDashboard /></AuthRoute>} />
               <Route path="/admin/products" element={<AuthRoute allowedRoles={["Admin"]}><ProductManagement /></AuthRoute>} />
+              <Route path="/deals" element={<Deals />} />
               {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
