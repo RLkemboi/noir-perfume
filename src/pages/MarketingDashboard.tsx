@@ -102,7 +102,7 @@ export default function MarketingDashboard() {
                 +12.5% <ArrowUpRight className="w-3 h-3" />
               </span>
             </div>
-            <p className="text-2xl font-serif font-bold gold-text">${stats?.totalRevenue?.toFixed(2)}</p>
+            <p className="text-2xl font-serif font-bold gold-text">KES {Math.round(stats?.totalRevenue ?? 0).toLocaleString()}</p>
             <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Gross Revenue</p>
           </div>
 
@@ -125,7 +125,7 @@ export default function MarketingDashboard() {
                 <Users className="w-5 h-5 text-purple-500" />
               </div>
             </div>
-            <p className="text-2xl font-serif font-bold">${stats?.averageOrderValue?.toFixed(2)}</p>
+            <p className="text-2xl font-serif font-bold">KES {Math.round(stats?.averageOrderValue ?? 0).toLocaleString()}</p>
             <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Avg. Ticket Size</p>
           </div>
 
@@ -156,7 +156,7 @@ export default function MarketingDashboard() {
                       <p className="text-[10px] text-muted-foreground">{new Date(sale.createdAt).toLocaleTimeString()}</p>
                     </div>
                   </div>
-                  <p className="text-sm font-serif font-bold gold-text">${sale.total.toFixed(2)}</p>
+                  <p className="text-sm font-serif font-bold gold-text">KES {Math.round(sale.total).toLocaleString()}</p>
                 </div>
               ))}
             </div>

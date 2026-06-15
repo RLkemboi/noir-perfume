@@ -123,7 +123,7 @@ export default function OperatorDashboard() {
                   </div>
                   <div className="space-y-1">
                     <p className="text-xs font-bold text-primary">ORDER #{order.orderId}</p>
-                    <p className="text-sm font-bold">{order.items.length} items • ${order.total.toFixed(2)}</p>
+                    <p className="text-sm font-bold">{order.items.length} items • KES {Math.round(order.total).toLocaleString()}</p>
                     <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
                       {order.shipping?.fullName} • {order.shipping?.city}
                     </p>

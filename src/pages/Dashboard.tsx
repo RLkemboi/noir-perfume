@@ -252,7 +252,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error(data.message || "Deposit failed");
       await refreshProfile();
       setDepositAmount("");
-      toast.success(`$${amount.toFixed(2)} added to your account balance.`);
+      toast.success(`KES ${Math.round(amount).toLocaleString()} added to your account balance.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Deposit failed");
     } finally {
@@ -417,7 +417,7 @@ export default function Dashboard() {
                 <>
                   <Sparkles className="w-6 h-6 text-primary mx-auto mb-2" />
                   <p className={`text-2xl font-serif font-bold ${(profile.accountBalance ?? 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                    {canUseLedgerAccount ? `$${Math.abs(profile.accountBalance ?? 0).toFixed(2)}` : profile.tier}
+                    {canUseLedgerAccount ? `KES ${Math.round(Math.abs(profile.accountBalance ?? 0)).toLocaleString()}` : profile.tier}
                   </p>
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold">
                     {canUseLedgerAccount
@@ -466,7 +466,7 @@ export default function Dashboard() {
                 <div className="text-right">
                   <p className="text-[10px] tracking-widest uppercase font-bold text-muted-foreground">Current Balance</p>
                   <p className={`text-2xl font-serif font-bold ${(profile.accountBalance ?? 0) >= 0 ? "text-emerald-500" : "text-red-500"}`}>
-                    {canUseLedgerAccount ? `$${(profile.accountBalance ?? 0).toFixed(2)}` : "Unavailable"}
+                    {canUseLedgerAccount ? `KES ${Math.round(profile.accountBalance ?? 0).toLocaleString()}` : "Unavailable"}
                   </p>
                 </div>
               </div>
@@ -492,7 +492,7 @@ export default function Dashboard() {
               <p className="text-[10px] text-muted-foreground">
                 {canUseLedgerAccount
                   ? `Positive balances are prepaid deposits. Negative balances are outstanding ledger debt. Outstanding ceiling: ${
-                      tierPolicy?.maxOutstandingBalance == null ? "Unlimited (Black tier)" : `$${tierPolicy.maxOutstandingBalance.toFixed(2)}`
+                      tierPolicy?.maxOutstandingBalance == null ? "Unlimited (Black tier)" : `KES ${Math.round(tierPolicy.maxOutstandingBalance).toLocaleString()}`
                     }.`
                   : "Junior and Bronze accounts cannot preload funds or use wallet-style credit."}
               </p>
@@ -555,7 +555,7 @@ export default function Dashboard() {
                       </div>
                       <div className="text-right flex flex-col justify-between items-end">
                         <div>
-                          <p className="font-serif gold-text font-bold text-lg">${order.total.toFixed(2)}</p>
+                          <p className="font-serif gold-text font-bold text-lg">KES {Math.round(order.total).toLocaleString()}</p>
                           <p className="text-[10px] text-muted-foreground">
                             {order.createdAt ? new Date(order.createdAt).toLocaleDateString(undefined, {
                               year: 'numeric', month: 'short', day: 'numeric'
@@ -605,7 +605,7 @@ export default function Dashboard() {
                             </p>
                             {order.paymentMethod === "PayOnDelivery" && (
                               <div className="space-y-1 text-xs text-muted-foreground">
-                                <p>Paid ${order.amountPaid.toFixed(2)} of ${order.total.toFixed(2)}. Remaining: ${order.amountDue.toFixed(2)}.</p>
+                                <p>Paid KES {Math.round(order.amountPaid).toLocaleString()} of KES {Math.round(order.total).toLocaleString()}. Remaining: KES {Math.round(order.amountDue).toLocaleString()}.</p>
                                 <p>
                                   {order.paymentReference === "PAY_AFTER_DELIVERY"
                                     ? "This order settles at delivery completion without ledger debt."
@@ -615,7 +615,7 @@ export default function Dashboard() {
                             )}
                             {order.paymentMethod === "Mpesa" && (
                               <div className="space-y-1 text-xs text-muted-foreground">
-                                <p>Paid ${order.amountPaid.toFixed(2)} of ${order.total.toFixed(2)}. Remaining: ${order.amountDue.toFixed(2)}.</p>
+                                <p>Paid KES {Math.round(order.amountPaid).toLocaleString()} of KES {Math.round(order.total).toLocaleString()}. Remaining: KES {Math.round(order.amountDue).toLocaleString()}.</p>
                                 {order.paymentPhone && <p>Phone: {order.paymentPhone}</p>}
                                 {order.paymentReference && <p>Receipt: {order.paymentReference}</p>}
                                 {order.paymentLastError && <p className="text-destructive">{order.paymentLastError}</p>}
@@ -710,7 +710,7 @@ export default function Dashboard() {
                                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest font-bold">Payment Features</p>
                                 <p className="text-xs text-muted-foreground">
                                   Status: {order.paymentStatus}. Prompt requests: {order.paymentPromptCount || 0}
-                                  {order.payOnDeliveryLimit ? ` • Outstanding limit: $${order.payOnDeliveryLimit.toFixed(2)}` : ""}
+                                  {order.payOnDeliveryLimit ? ` • Outstanding limit: KES ${Math.round(order.payOnDeliveryLimit).toLocaleString()}` : ""}
                                 </p>
                               </div>
                               {order.amountDue > 0 && (
@@ -731,7 +731,7 @@ export default function Dashboard() {
                                   disabled={payingOrderId === order.orderId}
                                   className="px-4 py-2 bg-primary text-primary-foreground text-[10px] tracking-widest uppercase font-bold hover:bg-gold-light disabled:opacity-50"
                                 >
-                                  {payingOrderId === order.orderId ? "Processing..." : `Pay Remaining $${order.amountDue.toFixed(2)}`}
+                                  {payingOrderId === order.orderId ? "Processing..." : `Pay Remaining KES ${Math.round(order.amountDue).toLocaleString()}`}
                                 </button>
                               </div>
                             )}

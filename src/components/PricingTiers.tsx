@@ -40,7 +40,7 @@ const PricingTiers = () => {
             Choose Your <span className="gold-text italic">Commitment</span>
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto font-sans leading-relaxed">
-            Where comparable luxury fragrances retail for $300 and beyond, NOIR offers the
+            Where comparable luxury fragrances retail for KES 39,000 and beyond, NOIR offers the
             same obsessive craft in three formats — hand-poured in Nairobi.
           </p>
         </motion.div>

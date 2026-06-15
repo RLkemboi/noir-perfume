@@ -705,7 +705,7 @@ app.post("/api/checkout", async (c) => {
       productId: product.id,
       name: product.name,
       brand: product.brand,
-      price: `$${price.toFixed(2)}`,
+      price: `KES ${Math.round(price).toLocaleString()}`,
       image: primaryImage?.url || "",
       quantity: qty,
       size: tier.size,

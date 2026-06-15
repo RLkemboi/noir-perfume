@@ -327,7 +327,7 @@ export default function AdminDashboard() {
   }
 
   const hasData = activeWeeks.length > 0;
-  const formatMoney = (value?: number) => `$${Number(value ?? 0).toFixed(2)}`;
+  const formatMoney = (value?: number) => `KES ${Math.round(Number(value ?? 0)).toLocaleString()}`;
 
   return (
     <div className="min-h-screen bg-background pt-24 pb-16 px-4">
@@ -429,22 +429,22 @@ export default function AdminDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div className="glass-panel p-6">
                   <TrendingUp className="w-6 h-6 text-primary mb-4" />
-                  <p className="text-3xl font-serif font-bold gold-text">${totalRevenue.toFixed(2)}</p>
+                  <p className="text-3xl font-serif font-bold gold-text">KES {Math.round(totalRevenue).toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Booked Revenue</p>
                 </div>
                 <div className="glass-panel p-6">
                   <Wallet className="w-6 h-6 text-emerald-500 mb-4" />
-                  <p className="text-3xl font-serif font-bold text-emerald-500">${financials?.realizedRevenue.toFixed(2) ?? "0.00"}</p>
+                  <p className="text-3xl font-serif font-bold text-emerald-500">KES {Math.round(financials?.realizedRevenue ?? 0).toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Realized Cash</p>
                 </div>
                 <div className="glass-panel p-6">
                   <Receipt className="w-6 h-6 text-yellow-500 mb-4" />
-                  <p className="text-3xl font-serif font-bold text-yellow-500">${financials?.openPipelineRevenue.toFixed(2) ?? "0.00"}</p>
+                  <p className="text-3xl font-serif font-bold text-yellow-500">KES {Math.round(financials?.openPipelineRevenue ?? 0).toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Pipeline Value</p>
                 </div>
                 <div className="glass-panel p-6">
                   <Clock className="w-6 h-6 text-purple-500 mb-4" />
-                  <p className="text-3xl font-serif font-bold text-purple-500">${financials?.estimatedGrossProfit.toFixed(2) ?? "0.00"}</p>
+                  <p className="text-3xl font-serif font-bold text-purple-500">KES {Math.round(financials?.estimatedGrossProfit ?? 0).toLocaleString()}</p>
                   <p className="text-[10px] text-muted-foreground tracking-widest uppercase font-bold mt-1">Estimated Gross Profit</p>
                 </div>
               </div>
@@ -455,10 +455,10 @@ export default function AdminDashboard() {
                   <h3 className="text-sm font-bold tracking-widest uppercase mb-4 text-primary">Revenue Health</h3>
                   <div className="space-y-4">
                       {[
-                        { label: "Average Order Value", value: `$${financials?.averageOrderValue.toFixed(2) ?? "0.00"}` },
+                        { label: "Average Order Value", value: `KES ${Math.round(financials?.averageOrderValue ?? 0).toLocaleString()}` },
                         { label: "Gross Margin", value: `${financials?.grossMargin.toFixed(1) ?? "0.0"}%` },
-                        { label: "COD Exposure", value: `$${financials?.outstandingCod.toFixed(2) ?? "0.00"}` },
-                        { label: "Cancelled Revenue", value: `$${financials?.cancelledRevenue.toFixed(2) ?? "0.00"}` },
+                        { label: "COD Exposure", value: `KES ${Math.round(financials?.outstandingCod ?? 0).toLocaleString()}` },
+                        { label: "Cancelled Revenue", value: `KES ${Math.round(financials?.cancelledRevenue ?? 0).toLocaleString()}` },
                         { label: "Units Sold", value: `${financials?.unitsSold ?? 0}` },
                       ].map((metric) => (
                       <div key={metric.label} className="flex justify-between items-center pb-4 border-b border-border/40 last:border-0 last:pb-0">
@@ -714,7 +714,7 @@ export default function AdminDashboard() {
                               </span>
                             </td>
                             <td className="px-6 py-4">
-                              <span className="text-sm font-serif font-bold gold-text">${order.total.toFixed(2)}</span>
+                              <span className="text-sm font-serif font-bold gold-text">KES {Math.round(order.total).toLocaleString()}</span>
                             </td>
                             <td className="px-6 py-4">
                               {statusOptions.includes(order.status) ? (
@@ -751,7 +751,7 @@ export default function AdminDashboard() {
                                   {order.paymentStatus}
                                 </span>
                                 <p className="text-[10px] text-muted-foreground">
-                                  ${order.amountPaid.toFixed(2)} / ${order.total.toFixed(2)}
+                                  KES {Math.round(order.amountPaid).toLocaleString()} / KES {Math.round(order.total).toLocaleString()}
                                 </p>
                               </div>
                             </td>

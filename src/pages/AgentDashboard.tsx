@@ -183,7 +183,7 @@ export default function AgentDashboard() {
                   <div className="space-y-1">
                     <p className="text-[10px] text-primary font-bold tracking-widest uppercase">Order #{order.orderId}</p>
                     <p className="text-sm font-bold">{order.shipping?.city}, {order.shipping?.country}</p>
-                    <p className="text-[10px] text-muted-foreground">{order.items.length} items • ${order.total.toFixed(2)}</p>
+                    <p className="text-[10px] text-muted-foreground">{order.items.length} items • KES {Math.round(order.total).toLocaleString()}</p>
                   </div>
                   <button
                     onClick={() => handleAccept(order.orderId)}

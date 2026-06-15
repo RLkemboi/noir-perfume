@@ -498,9 +498,9 @@ export const ProductManagement = () => {
                         </div>
                       </td>
                       <td className="px-4 py-4 text-sm">
-                        ${product.price.toFixed(2)}
+                        KES {Math.round(product.price).toLocaleString()}
                         {product.discountPrice ? (
-                          <div className="text-xs text-muted-foreground">Sale ${product.discountPrice.toFixed(2)}</div>
+                          <div className="text-xs text-muted-foreground">Sale KES {Math.round(product.discountPrice).toLocaleString()}</div>
                         ) : null}
                       </td>
                       <td className="px-4 py-4 text-sm">
