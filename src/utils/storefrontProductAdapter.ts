@@ -49,7 +49,7 @@ export function mapManagedProductToStorefront(product: ManagedProduct): Storefro
     brand: product.brand,
     subtitle: product.subtitle || product.category,
     description: product.description,
-    price: `$${product.price.toFixed(2)}`,
+    price: `KES ${Math.round(product.price).toLocaleString()}`,
     image: primaryImage?.url || "/assets/hero-perfume.jpg",
     topNotes: notesTop.length > 0 ? notesTop : ["Bergamot"],
     heartNotes: notesMiddle.length > 0 ? notesMiddle : ["Rose"],

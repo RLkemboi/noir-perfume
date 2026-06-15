@@ -1,17 +1,20 @@
 import { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Search, ShoppingBag, User, Menu, X, ChevronDown } from "lucide-react";
+import { AnimatePresence } from "framer-motion";
+import { Search, ShoppingBag, User, Menu, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCart } from "@/context/CartContext";
 import { useAuth } from "@/context/AuthContext";
 import SearchOverlay from "./SearchOverlay";
 import { TierBadge } from "./ui/TierBadge";
-import { SCENT_FAMILIES } from "@/config/storefront";
 
-const moods = ["Boardroom", "Evening Affair", "Intimate", "Weekend Escape"];
+const NAV_LINKS = [
+  { label: "The Collection", to: "/collection" },
+  { label: "Scent Finder", href: "/#scent-finder" },
+  { label: "Editor's Picks", href: "/#products" },
+  { label: "Our Story", href: "#story" },
+];
 
 const Header = () => {
-  const [megaOpen, setMegaOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const { totalItems, setIsOpen } = useCart();
@@ -19,45 +22,56 @@ const Header = () => {
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 glass-header">
-      <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-        {/* Logo */}
-        <Link to="/" aria-label="NOIR home">
-          <img src="/assets/noir-logo-1.svg" alt="NOIR" className="h-80 w-auto" />
-        </Link>
-
-        {/* Desktop Nav */}
-        <nav className="hidden lg:flex items-center gap-8">
-          <button
-            onMouseEnter={() => setMegaOpen(true)}
-            onMouseLeave={() => setMegaOpen(false)}
-            onFocus={() => setMegaOpen(true)}
-            onBlur={() => setMegaOpen(false)}
-            className="flex items-center gap-1 text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors"
-            aria-expanded={megaOpen}
-            aria-haspopup="true"
-            aria-label="Collections menu"
-          >
-            Collections <ChevronDown className="w-3 h-3" />
-          </button>
-          <Link to="/collection" className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors">
-            The Collection
-          </Link>
-          <a href="/#scent-finder" className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors">
-            Scent Finder
-          </a>
-          <a href="/#products" className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors">
-            Editor's Picks
-          </a>
-          <a href="#story" className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors">
-            Our Story
-          </a>
+      <div className="container mx-auto px-6 py-4 flex items-center gap-8">
+        {/* Nav links — desktop */}
+        <nav className="hidden lg:flex items-center gap-8 flex-1">
+          {NAV_LINKS.map(({ label, to, href }) =>
+            to ? (
+              <Link
+                key={label}
+                to={to}
+                className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors whitespace-nowrap"
+              >
+                {label}
+              </Link>
+            ) : (
+              <a
+                key={label}
+                href={href}
+                className="text-sm tracking-[0.15em] uppercase text-foreground/80 hover:text-primary transition-colors whitespace-nowrap"
+              >
+                {label}
+              </a>
+            )
+          )}
         </nav>
 
+        {/* Search bar — desktop */}
+        <div
+          className="hidden lg:flex items-center gap-2 flex-1 max-w-xs bg-background/60 border border-border hover:border-primary/40 transition-colors px-3 py-1.5 cursor-text"
+          onClick={() => setSearchOpen(true)}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => e.key === "Enter" && setSearchOpen(true)}
+          aria-label="Open search"
+        >
+          <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+          <span className="text-sm text-muted-foreground font-sans select-none">
+            Search fragrances…
+          </span>
+        </div>
+
         {/* Actions */}
-        <div className="flex items-center gap-5">
-          <button onClick={() => setSearchOpen(true)} className="text-foreground/70 hover:text-primary transition-colors" aria-label="Open search">
+        <div className="flex items-center gap-5 ml-auto lg:ml-0">
+          {/* Mobile search */}
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="lg:hidden text-foreground/70 hover:text-primary transition-colors"
+            aria-label="Open search"
+          >
             <Search className="w-5 h-5" />
           </button>
+
           <Link
             to={user || isGuest ? "/dashboard" : "/login"}
             className="hidden sm:flex items-center gap-1.5 text-foreground/70 hover:text-primary transition-colors"
@@ -71,6 +85,7 @@ const Header = () => {
               <span className="text-[10px] tracking-widest uppercase font-bold text-primary/70">Guest</span>
             )}
           </Link>
+
           <button
             onClick={() => setIsOpen(true)}
             className="relative text-foreground/70 hover:text-primary transition-colors"
@@ -83,6 +98,7 @@ const Header = () => {
               </span>
             )}
           </button>
+
           <button
             className="lg:hidden text-foreground/70"
             onClick={() => setMobileOpen(!mobileOpen)}
@@ -94,74 +110,32 @@ const Header = () => {
         </div>
       </div>
 
-      {/* Mega Menu */}
-      <AnimatePresence>
-        {megaOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            transition={{ duration: 0.2 }}
-            onMouseEnter={() => setMegaOpen(true)}
-            onMouseLeave={() => setMegaOpen(false)}
-            className="absolute top-full left-0 right-0 glass-panel border-t-0"
-          >
-            <div className="container mx-auto px-6 py-10 grid grid-cols-3 gap-12">
-              <div>
-                <h4 className="text-primary text-xs tracking-[0.2em] uppercase mb-4 font-sans font-semibold">By Scent Profile</h4>
-                <ul className="space-y-3">
-                  {SCENT_FAMILIES.map((family) => (
-                    <li key={family.key}>
-                      <Link
-                        to={`/collection?family=${family.key}`}
-                        onClick={() => setMegaOpen(false)}
-                        className="text-foreground/70 text-sm hover:text-primary transition-colors"
-                      >
-                        {family.title} · {family.technical}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h4 className="text-primary text-xs tracking-[0.2em] uppercase mb-4 font-sans font-semibold">By Mood</h4>
-                <ul className="space-y-3">
-                  {moods.map((m) => (
-                    <li key={m}>
-                      <span className="text-foreground/70 text-sm">{m}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h4 className="text-primary text-xs tracking-[0.2em] uppercase mb-4 font-sans font-semibold">Categories</h4>
-                <ul className="space-y-3">
-                  {["For Him", "For Her", "Unisex", "Discovery Sets", "Gift Sets"].map((c) => (
-                    <li key={c}>
-                      <span className="text-foreground/70 text-sm">{c}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Mobile Menu */}
+      {/* Mobile menu */}
       <AnimatePresence>
         {mobileOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="lg:hidden glass-panel border-t-0 overflow-hidden"
-          >
+          <div className="lg:hidden bg-background border-t border-border">
             <nav className="flex flex-col px-6 py-6 gap-4">
-              <Link to="/collection" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">The Collection</Link>
-              <a href="/#scent-finder" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Scent Finder</a>
-              <a href="/#products" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Editor's Picks</a>
-              <a href="#story" onClick={() => setMobileOpen(false)} className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2">Our Story</a>
+              {NAV_LINKS.map(({ label, to, href }) =>
+                to ? (
+                  <Link
+                    key={label}
+                    to={to}
+                    onClick={() => setMobileOpen(false)}
+                    className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2"
+                  >
+                    {label}
+                  </Link>
+                ) : (
+                  <a
+                    key={label}
+                    href={href}
+                    onClick={() => setMobileOpen(false)}
+                    className="text-sm tracking-[0.15em] uppercase text-foreground/80 py-2"
+                  >
+                    {label}
+                  </a>
+                )
+              )}
               <Link
                 to={user || isGuest ? "/dashboard" : "/login"}
                 onClick={() => setMobileOpen(false)}
@@ -170,9 +144,10 @@ const Header = () => {
                 {user ? "My Account" : isGuest ? "Guest Session" : "Sign In"}
               </Link>
             </nav>
-          </motion.div>
+          </div>
         )}
       </AnimatePresence>
+
       <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );

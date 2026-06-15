@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip.tsx";
 import { AuthProvider, useAuth } from "@/context/AuthContext";
 import { CartProvider } from "@/context/CartContext";
 import { CartDrawer } from "@/components/CartDrawer";
+import FloatingLogo from "@/components/FloatingLogo";
+import { MetalTransition } from "@/components/MetalTransition";
 import Index from "./pages/Index.tsx";
 import { Shield } from "lucide-react";
 
@@ -187,6 +189,8 @@ const App = () => (
           <Sonner position="top-center" />
           <BrowserRouter>
             <CartDrawer />
+            <FloatingLogo />
+            <MetalTransition />
             <Suspense fallback={null}>
             <Routes>
               <Route path="/" element={<Index />} />
