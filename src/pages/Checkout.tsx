@@ -28,7 +28,8 @@ interface SavedAddress extends ShippingForm {
   nickname: string;
 }
 
-const SHIPPING_COST = 15;
+const SHIPPING_COST = 1800;
+const fmtKES = (n: number) => `KES ${Math.round(n).toLocaleString()}`;
 function safeReadAddresses(key: string): SavedAddress[] {
   try {
     const raw = localStorage.getItem(key);
@@ -271,12 +272,12 @@ export default function Checkout() {
 
     if (paymentMethod === "PayOnDelivery" && usesAccountBalance) {
       if (normalizedUpfrontAmount < minimumLedgerUpfront) {
-        toast.error(`This tier requires at least $${minimumLedgerUpfront.toFixed(2)} upfront for delivery credit.`);
+        toast.error(`This tier requires at least ${fmtKES(minimumLedgerUpfront)} upfront for delivery credit.`);
         return;
       }
       if (exceedsOutstandingLimit) {
         toast.error(
-          `This order exceeds your outstanding balance limit of $${(outstandingLimit ?? 0).toFixed(2)}.`
+          `This order exceeds your outstanding balance limit of ${fmtKES(outstandingLimit ?? 0)}.`
         );
         return;
       }
@@ -333,7 +334,7 @@ export default function Checkout() {
             ? data.mpesa?.customerMessage || "Sandbox payment completed successfully. Live credentials will replace this simulated charge later."
             : data.mpesa?.customerMessage || "Check your phone and complete the M-Pesa STK prompt to finish payment."
           : paymentMethod === "PayOnDelivery" && usesAccountBalance
-            ? `Ledger charge posted. Upfront $${normalizedUpfrontAmount.toFixed(2)}, remaining $${ledgerCharge.toFixed(2)}. Projected balance: $${projectedAccountBalance.toFixed(2)}.`
+            ? `Ledger charge posted. Upfront ${fmtKES(normalizedUpfrontAmount)}, remaining ${fmtKES(ledgerCharge)}. Projected balance: ${fmtKES(projectedAccountBalance)}.`
             : paymentMethod === "PayOnDelivery"
               ? "Your pay-after-delivery order is confirmed. Payment will be settled during delivery completion."
               : "Your luxury fragrance journey has begun."
@@ -345,7 +346,7 @@ export default function Checkout() {
             ? data.mpesa?.mock
               ? data.mpesa?.customerMessage || "Sandbox payment completed."
               : data.mpesa?.customerMessage || `STK push sent to ${mpesaPhone}.`
-            : `Total: $${data.total}`,
+            : `Total: KES ${typeof data.total === "number" ? Math.round(data.total).toLocaleString() : data.total}`,
         className: "glass-panel border-primary/20",
       });
     } catch (err) {
@@ -569,7 +570,7 @@ export default function Checkout() {
                               </button>
                             </div>
                             <span className="font-serif gold-text font-bold whitespace-nowrap">
-                              ${lineTotal(item.price, item.quantity)}
+                              KES {Math.round(Number(lineTotal(item.price, item.quantity))).toLocaleString()}
                             </span>
                           </div>
                         </div>
@@ -822,15 +823,15 @@ export default function Checkout() {
                   <div className="space-y-3 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground font-sans">Subtotal</span>
-                      <span className="font-sans font-semibold">${subtotal.toFixed(2)}</span>
+                      <span className="font-sans font-semibold">{fmtKES(subtotal)}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-muted-foreground font-sans">Shipping</span>
-                      <span className="font-sans font-semibold">${subtotal > 0 ? SHIPPING_COST.toFixed(2) : "0.00"}</span>
+                      <span className="text-muted-foreground font-sans">Delivery</span>
+                      <span className="font-sans font-semibold">{subtotal > 0 ? fmtKES(SHIPPING_COST) : "KES 0"}</span>
                     </div>
                     <div className="border-t border-border pt-3 flex justify-between">
                       <span className="font-sans font-bold tracking-wider uppercase">Total</span>
-                      <span className="font-serif text-xl gold-text font-bold">${total.toFixed(2)}</span>
+                      <span className="font-serif text-xl gold-text font-bold">{fmtKES(total)}</span>
                     </div>
                   </div>
 
@@ -867,14 +868,14 @@ export default function Checkout() {
                             ? `${profile.tier} members currently use prepay checkout only.`
                             : usesAccountBalance
                               ? outstandingLimit == null
-                                ? `${profile.tier} has unlimited ledger capacity. Projected balance after this order: $${projectedAccountBalance.toFixed(2)}.`
-                                : `Outstanding limit: $${outstandingLimit.toFixed(2)}. Projected outstanding after this order: $${projectedOutstandingBalance.toFixed(2)}.`
+                                ? `${profile.tier} has unlimited ledger capacity. Projected balance after this order: ${fmtKES(projectedAccountBalance)}.`
+                                : `Outstanding limit: ${fmtKES(outstandingLimit)}. Projected outstanding after this order: ${fmtKES(projectedOutstandingBalance)}.`
                               : `${profile.tier} can use COD without ledger debt.`}
                     </p>
                     {paymentMethod === "PayOnDelivery" && profile && (
                       <div className="rounded border border-primary/20 bg-primary/5 p-4 text-[10px] text-muted-foreground leading-relaxed">
                         {usesAccountBalance
-                          ? `Ledger tier rules: upfront required $${minimumLedgerUpfront.toFixed(2)} minimum (${Math.round(minLedgerUpfrontRatio * 100)}%). Remaining amount becomes ledger debt.`
+                          ? `Ledger tier rules: upfront required ${fmtKES(minimumLedgerUpfront)} minimum (${Math.round(minLedgerUpfrontRatio * 100)}%). Remaining amount becomes ledger debt.`
                           : "Bronze COD settles at delivery completion. Ledger and overdraft are unavailable on this tier."}
                       </div>
                     )}
@@ -894,11 +895,11 @@ export default function Checkout() {
                           className="w-full bg-background border border-border px-4 py-3 text-sm focus:outline-none focus:border-primary transition-colors"
                         />
                         <p className="text-[10px] text-muted-foreground">
-                          Remaining ledger charge: ${ledgerCharge.toFixed(2)}. Projected balance: ${projectedAccountBalance.toFixed(2)}.
+                          Remaining ledger charge: {fmtKES(ledgerCharge)}. Projected balance: {fmtKES(projectedAccountBalance)}.
                         </p>
                         {exceedsOutstandingLimit && (
                           <p className="text-[10px] text-destructive">
-                            This would exceed your outstanding limit of ${outstandingLimit?.toFixed(2)}.
+                            This would exceed your outstanding limit of {fmtKES(outstandingLimit ?? 0)}.
                           </p>
                         )}
                       </div>
@@ -929,7 +930,7 @@ export default function Checkout() {
                     className="w-full py-4 bg-primary text-primary-foreground text-xs tracking-[0.2em] uppercase font-sans font-bold hover:bg-gold-light transition-all duration-300 luxury-shadow disabled:opacity-50 flex items-center justify-center gap-2"
                   >
                     <ShieldCheck className="w-4 h-4" />
-                    {submitting ? "Placing Order..." : `Place Order — $${total.toFixed(2)}`}
+                    {submitting ? "Placing Order..." : `Place Order — ${fmtKES(total)}`}
                   </button>
 
                   <p className="text-[10px] text-muted-foreground text-center font-sans leading-relaxed">

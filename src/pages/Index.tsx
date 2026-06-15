@@ -13,7 +13,7 @@ const Index = () => {
   useSEO({
     title: "NOIR Perfume — Luxury Fragrances | Oud, Amber & Rare Scents",
     description:
-      "Shop NOIR's curated collection of ultra-premium fragrances — house scents and iconic brands like Tom Ford, Creed, Dior, Chanel & more. Free global shipping on orders over $300.",
+      "Shop NOIR's curated collection of ultra-premium fragrances — house scents and iconic brands like Tom Ford, Creed, Dior, Chanel & more. Free global shipping on orders over KES 39,000.",
     url: "/",
   });
 

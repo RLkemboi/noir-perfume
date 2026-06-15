@@ -103,7 +103,7 @@ export const CartDrawer = () => {
                           </button>
                         </div>
                         <span className="font-serif gold-text font-bold whitespace-nowrap">
-                          ${lineTotal(item.price, item.quantity)}
+                          KES {Math.round(Number(lineTotal(item.price, item.quantity))).toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -116,7 +116,7 @@ export const CartDrawer = () => {
               <div className="p-6 border-t border-border space-y-4">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground font-sans">Subtotal</span>
-                  <span className="font-serif text-xl gold-text font-bold">${subtotal.toFixed(2)}</span>
+                  <span className="font-serif text-xl gold-text font-bold">KES {Math.round(subtotal).toLocaleString()}</span>
                 </div>
                 <p className="text-muted-foreground text-xs font-sans">
                   Shipping & taxes calculated at checkout.
