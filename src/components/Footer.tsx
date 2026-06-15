@@ -7,7 +7,9 @@ const Footer = () => {
       <div className="container mx-auto px-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-10 mb-12">
           <div>
-            <h3 className="font-serif text-2xl tracking-[0.2em] gold-text font-bold mb-4">NOIR</h3>
+            <Link to="/" className="mb-4 inline-block" aria-label="NOIR home">
+              <img src="/assets/noir-logo.svg" alt="NOIR" className="h-10 w-auto" />
+            </Link>
             <p className="text-muted-foreground text-sm font-sans leading-relaxed">
               Luxury fragrance for those who built themselves from the ground up. No shortcuts. No compromises.
             </p>

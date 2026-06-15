@@ -21,8 +21,8 @@ const Header = () => {
     <header className="fixed top-0 left-0 right-0 z-50 glass-header">
       <div className="container mx-auto px-6 py-4 flex items-center justify-between">
         {/* Logo */}
-        <Link to="/" className="font-serif text-2xl tracking-[0.2em] gold-text font-bold">
-          NOIR
+        <Link to="/" aria-label="NOIR home">
+          <img src="/assets/noir-logo.svg" alt="NOIR" className="h-10 w-auto" />
         </Link>
 
         {/* Desktop Nav */}

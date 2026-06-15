@@ -89,8 +89,8 @@ export default function Signup() {
         className="w-full max-w-md relative z-10"
       >
         <div className="text-center mb-8">
-          <Link to="/" className="font-serif text-4xl tracking-[0.2em] gold-text font-bold mb-2 block">
-            NOIR
+          <Link to="/" className="mb-2 inline-block" aria-label="NOIR home">
+            <img src="/assets/noir-logo.svg" alt="NOIR" className="h-16 w-auto mx-auto" />
           </Link>
           <div className="h-px w-12 bg-primary/40 mx-auto mb-4" />
           <p className="text-muted-foreground text-[10px] tracking-[0.3em] uppercase font-bold">
