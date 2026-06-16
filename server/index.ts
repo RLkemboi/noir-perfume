@@ -1090,7 +1090,30 @@ app.post("/api/swaps/request", async (c) => {
     const currentSwapCount = profile.swapCount ?? 0;
     swapFee = currentSwapCount >= 1 ? 200 : 0;
 
-    // Increment swap count on user profile via updateStaffProfile (patch)
+    if (swapFee > 0) {
+      if ((profile.accountBalance ?? 0) < swapFee) {
+        throw new HTTPException(402, {
+          message: `A KES ${swapFee} swap fee applies. Your account balance (KES ${profile.accountBalance ?? 0}) is too low. Please top up first.`,
+        });
+      }
+      // Deduct fee BEFORE incrementing — if this fails, counter stays unchanged
+      await adjustUserAccountBalance(userId, -swapFee);
+      await addLedgerEntry({
+        id: crypto.randomUUID(),
+        userId,
+        type: "charge",
+        direction: "debit",
+        amount: swapFee,
+        balanceAfter: (profile.accountBalance ?? 0) - swapFee,
+        description: `Fragrance swap fee (swap #${currentSwapCount + 1})`,
+        createdAt: new Date().toISOString(),
+        actorId: userId,
+        actorEmail: userEmail,
+        metadata: { swapId },
+      });
+    }
+
+    // Increment only after fee is successfully handled
     await updateStaffProfile(userId, { swapCount: currentSwapCount + 1 });
   }
 
@@ -1633,6 +1656,10 @@ app.post("/api/orders/:orderId/customer-cancel", handleCustomerOrderCancellation
     const balanceDue = order.balanceDue ?? order.amountDue;
     if (!balanceDue || balanceDue <= 0) {
       throw new HTTPException(400, { message: "No outstanding balance to collect" });
+    }
+
+    if (order.balanceMpesaCheckoutRequestId && balanceDue > 0) {
+      throw new HTTPException(409, { message: "An M-Pesa request is already waiting for the customer to pay. Please wait before sending another." });
     }
 
     const phone = order.paymentPhone;
