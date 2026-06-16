@@ -32,6 +32,7 @@ export interface AuthProfile {
   accountBalance: number;
   completedOrderCount?: number;
   referralCount?: number;
+  swapCount?: number;
   employmentStatus?: EmploymentStatus;
   department?: string;
   hrNotes?: string;
