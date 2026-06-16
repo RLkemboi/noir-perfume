@@ -175,7 +175,7 @@ export default function Checkout() {
     };
 
     void poll(); // immediate first fetch
-    const interval = setInterval(() => void poll(), 30_000);
+    const interval = setInterval(() => void poll(), 5_000);
     return () => clearInterval(interval);
   }, [completed, orderId, orderStatus, user, isGuest, getIdToken, sessionId]);
 

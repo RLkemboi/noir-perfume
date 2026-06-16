@@ -36,6 +36,7 @@ import {
   confirmAdminDelivery,
   cancelOrder,
   getOrderByMpesaCheckoutRequestId,
+  getOrderByBalanceMpesaCheckoutRequestId,
   requestPaymentPrompt,
   recordOrderPayment,
   updateOrderPaymentMeta,
@@ -1442,7 +1443,11 @@ app.post("/api/orders/:orderId/customer-cancel", handleCustomerOrderCancellation
       throw new HTTPException(400, { message: "Invalid M-Pesa callback payload." });
     }
 
-    const order = await getOrderByMpesaCheckoutRequestId(callback.CheckoutRequestID);
+    let order = await getOrderByMpesaCheckoutRequestId(callback.CheckoutRequestID);
+    const isBalancePayment = !order;
+    if (isBalancePayment) {
+      order = await getOrderByBalanceMpesaCheckoutRequestId(callback.CheckoutRequestID);
+    }
     if (!order) {
       return c.json({ success: true, ignored: true });
     }
@@ -1463,20 +1468,33 @@ app.post("/api/orders/:orderId/customer-cancel", handleCustomerOrderCancellation
       const receiptNumber = String(findValue("MpesaReceiptNumber") || "");
       const phoneNumber = String(findValue("PhoneNumber") || order.paymentPhone || "");
 
-      if ((receiptNumber && order.mpesaReceiptNumber === receiptNumber) || order.amountDue <= 0) {
+      const existingReceipt = isBalancePayment ? order.balanceMpesaReceiptNumber : order.mpesaReceiptNumber;
+      if ((receiptNumber && existingReceipt === receiptNumber) || order.amountDue <= 0) {
         return c.json({ success: true, duplicate: true });
       }
 
       let updated = await recordOrderPayment(order.orderId, Number(amount.toFixed(2)), "mpesa_stk");
       if (updated) {
-        await updateOrderPaymentMeta(order.orderId, {
-          paymentPhone: phoneNumber || order.paymentPhone,
-          paymentReference: receiptNumber || updated.paymentReference,
-          mpesaReceiptNumber: receiptNumber || updated.mpesaReceiptNumber,
-          paymentLastError: undefined,
-          mpesaMerchantRequestId: callback.MerchantRequestID || updated.mpesaMerchantRequestId,
-          mpesaCheckoutRequestId: callback.CheckoutRequestID || updated.mpesaCheckoutRequestId,
-        });
+        const now = new Date().toISOString();
+        if (isBalancePayment) {
+          await updateOrderPaymentMeta(order.orderId, {
+            paymentPhone: phoneNumber || order.paymentPhone,
+            paymentReference: receiptNumber || updated.paymentReference,
+            balanceMpesaReceiptNumber: receiptNumber,
+            balancePaidAt: now,
+            paymentLastError: undefined,
+          });
+          await patchOrder(order.orderId, { balanceDue: 0, balancePaidAt: now });
+        } else {
+          await updateOrderPaymentMeta(order.orderId, {
+            paymentPhone: phoneNumber || order.paymentPhone,
+            paymentReference: receiptNumber || updated.paymentReference,
+            mpesaReceiptNumber: receiptNumber || updated.mpesaReceiptNumber,
+            paymentLastError: undefined,
+            mpesaMerchantRequestId: callback.MerchantRequestID || updated.mpesaMerchantRequestId,
+            mpesaCheckoutRequestId: callback.CheckoutRequestID || updated.mpesaCheckoutRequestId,
+          });
+        }
         updated = await awardLoyaltyIfEligible(updated);
       }
 
@@ -1485,8 +1503,12 @@ app.post("/api/orders/:orderId/customer-cancel", handleCustomerOrderCancellation
 
     await updateOrderPaymentMeta(order.orderId, {
       paymentLastError: callback.ResultDesc || "M-Pesa payment failed.",
-      mpesaMerchantRequestId: callback.MerchantRequestID || order.mpesaMerchantRequestId,
-      mpesaCheckoutRequestId: callback.CheckoutRequestID || order.mpesaCheckoutRequestId,
+      ...(isBalancePayment
+        ? { balanceMpesaMerchantRequestId: callback.MerchantRequestID || order.balanceMpesaMerchantRequestId }
+        : {
+            mpesaMerchantRequestId: callback.MerchantRequestID || order.mpesaMerchantRequestId,
+            mpesaCheckoutRequestId: callback.CheckoutRequestID || order.mpesaCheckoutRequestId,
+          }),
     });
 
     return c.json({ success: true });

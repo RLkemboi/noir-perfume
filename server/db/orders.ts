@@ -411,6 +411,20 @@ export async function getOrderByMpesaCheckoutRequestId(checkoutRequestId: string
   );
 }
 
+export async function getOrderByBalanceMpesaCheckoutRequestId(checkoutRequestId: string): Promise<Order | null> {
+  return withOrdersFallback(
+    async () => {
+      const snapshot = await ordersCollection!.where("balanceMpesaCheckoutRequestId", "==", checkoutRequestId).limit(1).get();
+      if (snapshot.empty) return null;
+      return normalizeOrder(snapshot.docs[0].data() as Order);
+    },
+    () => {
+      const order = Array.from(memoryOrders.values()).find((entry) => entry.balanceMpesaCheckoutRequestId === checkoutRequestId);
+      return order ? normalizeOrder(order) : null;
+    }
+  );
+}
+
 export async function getAgentOrders(agentId: string): Promise<Order[]> {
   return withOrdersFallback(
     async () => {
