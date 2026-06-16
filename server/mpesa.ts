@@ -82,11 +82,7 @@ export async function initiateMpesaStkPush(payload: MpesaStkPayload): Promise<Mp
   const config = getConfig();
   const phoneNumber = normalizeMpesaPhone(payload.phoneNumber);
 
-  if (getEnvironment() === "sandbox" || !isConfigured()) {
-    if (!config.mockEnabled && !isConfigured()) {
-      throw new Error("M-Pesa is not configured. Set MPESA credentials and callback URL on the server.");
-    }
-
+  if (config.mockEnabled) {
     return {
       merchantRequestId: `mock-merchant-${Date.now()}`,
       checkoutRequestId: `mock-checkout-${Date.now()}`,
@@ -95,6 +91,10 @@ export async function initiateMpesaStkPush(payload: MpesaStkPayload): Promise<Mp
       mock: true,
       receiptNumber: `MOCK-${Date.now()}`,
     };
+  }
+
+  if (!isConfigured()) {
+    throw new Error("M-Pesa is not configured. Set MPESA credentials and callback URL on the server.");
   }
 
   const timestamp = getTimestamp();
