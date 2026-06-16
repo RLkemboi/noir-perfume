@@ -28,10 +28,16 @@ function getBaseUrl() {
 
 export function normalizeMpesaPhone(input: string) {
   const digits = input.replace(/\D/g, "");
-  if (digits.startsWith("254") && digits.length === 12) return digits;
-  if (digits.startsWith("0") && digits.length === 10) return `254${digits.slice(1)}`;
-  if (digits.startsWith("7") && digits.length === 9) return `254${digits}`;
-  throw new Error("Enter a valid Safaricom phone number, for example 0712345678.");
+  let normalized: string | null = null;
+  if (digits.startsWith("254") && digits.length === 12) normalized = digits;
+  else if (digits.startsWith("0") && digits.length === 10) normalized = `254${digits.slice(1)}`;
+  else if (digits.startsWith("7") && digits.length === 9) normalized = `254${digits}`;
+
+  // Safaricom numbers begin with 2547x or 2541x
+  if (!normalized || !/^2547\d{8}$|^2541\d{8}$/.test(normalized)) {
+    throw new Error("Enter a valid Safaricom number (07xx or 01xx), for example 0712345678.");
+  }
+  return normalized;
 }
 
 function getTimestamp() {

@@ -170,7 +170,7 @@ export default function Dashboard() {
       return "bg-emerald-500/10 text-emerald-500";
     }
     if (order.customerDeliveryConfirmed || order.agentDeliveryConfirmed) {
-      return "bg-red-500/10 text-red-500";
+      return "bg-amber-500/10 text-amber-500";
     }
     return "bg-yellow-500/10 text-yellow-500";
   };

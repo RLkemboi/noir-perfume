@@ -199,7 +199,7 @@ async function verifyAuthToken(token: string) {
   try {
     return await auth.verifyIdToken(token);
   } catch (err) {
-    console.error("[Auth] Token verification failed:", err);
+    console.error("[Auth] Token verification failed:", err instanceof Error ? err.message : "unknown error");
     if (isAuthConfigurationMismatch(err)) {
       throw new HTTPException(503, {
         message: "Authentication configuration mismatch between client and server. Rebuild the frontend with the correct Firebase web config and redeploy.",
@@ -962,7 +962,7 @@ app.post("/api/checkout", async (c) => {
   if (paymentMethod === "Mpesa" && normalizedPaymentPhone) {
     // 50/50 split: STK push charges the deposit only (50%); balance due on delivery.
     const depositAmount = Math.round(order.total * 0.5);
-    const balanceDue = order.total - depositAmount;
+    const balanceDue = Math.round(order.total - depositAmount);
 
     try {
       const stk = await initiateMpesaStkPush({
@@ -1189,6 +1189,7 @@ app.get("/api/user/profile", async (c) => {
 
   app.post("/api/orders/:orderId/comment", async (c) => {
     const orderId = Number(c.req.param("orderId"));
+    if (!Number.isFinite(orderId)) throw new HTTPException(400, { message: "Invalid order ID" });
     const body = await c.req.json();
     const { comment, reviewRating } = body;
     const order = await getOrderById(orderId);
@@ -1224,6 +1225,7 @@ app.get("/api/user/profile", async (c) => {
 
   app.post("/api/orders/:orderId/request-payment-prompt", async (c) => {
     const orderId = Number(c.req.param("orderId"));
+    if (!Number.isFinite(orderId)) throw new HTTPException(400, { message: "Invalid order ID" });
     const order = await getOrderById(orderId);
     if (!order) throw new HTTPException(404, { message: "Order not found" });
     if (order.status === "Cancelled") {
@@ -1271,8 +1273,8 @@ const handleCustomerOrderCancellation = async (c: Context) => {
   }
 
   const cancellationMessage = "Order cancelled by customer before dispatch.";
-  await cancelOrder(orderId, cancellationMessage);
-  await reverseOrderFinancials(order, order.userId || "guest", order.userEmail);
+  const cancelledOrder = await cancelOrder(orderId, cancellationMessage);
+  await reverseOrderFinancials(cancelledOrder ?? order, order.userId || "guest", order.userEmail);
   await restoreInventoryForOrder(order, order.userId || "guest", order.userEmail);
   const updated = (await getOrderById(orderId)) || order;
   addSystemLog("info", "OrderCancellation", `Customer cancelled order ${orderId}.`);
@@ -1284,6 +1286,7 @@ app.post("/api/orders/:orderId/customer-cancel", handleCustomerOrderCancellation
 
   app.post("/api/orders/:orderId/pay", async (c) => {
     const orderId = Number(c.req.param("orderId"));
+    if (!Number.isFinite(orderId)) throw new HTTPException(400, { message: "Invalid order ID" });
     const order = await getOrderById(orderId);
     if (!order) throw new HTTPException(404, { message: "Order not found" });
     if (order.status === "Cancelled") {
@@ -1341,6 +1344,7 @@ app.post("/api/orders/:orderId/customer-cancel", handleCustomerOrderCancellation
 
   app.post("/api/orders/:orderId/mpesa-stk", async (c) => {
     const orderId = Number(c.req.param("orderId"));
+    if (!Number.isFinite(orderId)) throw new HTTPException(400, { message: "Invalid order ID" });
     const order = await getOrderById(orderId);
     if (!order) throw new HTTPException(404, { message: "Order not found" });
     if (order.status === "Cancelled") {
@@ -2007,8 +2011,8 @@ app.post("/api/orders/:orderId/customer-cancel", handleCustomerOrderCancellation
     let order: Order | null;
     if (body.status === "Cancelled") {
       const cancellationMessage = body.cancellationMessage?.trim() || "Your order was cancelled. Any pending charges were voided and further payment is disabled.";
-      await cancelOrder(orderId, cancellationMessage);
-      await reverseOrderFinancials(existingOrder, "admin");
+      const cancelledOrder = await cancelOrder(orderId, cancellationMessage);
+      await reverseOrderFinancials(cancelledOrder ?? existingOrder, "admin");
       await restoreInventoryForOrder(existingOrder, "admin");
       addSystemLog("warning", "OrderCancellation", `Admin cancelled order ${orderId}.`);
       order = await getOrderById(orderId);

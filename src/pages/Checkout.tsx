@@ -122,8 +122,8 @@ export default function Checkout() {
   useEffect(() => {
     setShipping((prev) => ({
       ...prev,
-      fullName: user?.displayName || prev.fullName,
-      email: user?.email || prev.email,
+      fullName: prev.fullName || user?.displayName || "",
+      email: prev.email || user?.email || "",
     }));
   }, [user]);
 
